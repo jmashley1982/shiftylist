@@ -1,11 +1,27 @@
 <nav class="navbar">
-  <a href="/admin/dashboard" class="brand">ShiftList Admin</a>
-  <div class="nav-links">
-    <a href="/admin/dashboard" class="nav-link <%= active === 'dashboard' ? 'active' : '' %>">Dashboard</a>
-    <a href="/admin/employees" class="nav-link <%= active === 'employees' ? 'active' : '' %>">Employees</a>
-    <a href="/admin/shifts" class="nav-link <%= active === 'shifts' ? 'active' : '' %>">Shifts</a>
-    <a href="/admin/schedule" class="nav-link <%= active === 'schedule' ? 'active' : '' %>">Schedule</a>
-    <a href="/admin/reports" class="nav-link <%= active === 'reports' ? 'active' : '' %>">Reports</a>
-    <a href="/admin/logout" class="nav-link" style="color:var(--danger);">Logout</a>
-  </div>
+  <a href="/admin/dashboard" class="brand">ShiftList</a>
+  <a href="/admin/logout" class="btn btn-ghost btn-sm text-danger" style="color:var(--danger);min-height:36px;padding:7px 12px;">Log out</a>
+</nav>
+
+<nav class="admin-tab-nav">
+  <a href="/admin/dashboard" class="admin-tab-link <%= active === 'dashboard' ? 'active' : '' %>">
+    <span class="tab-icon">🏠</span>
+    <span>Home</span>
+  </a>
+  <a href="/admin/employees" class="admin-tab-link <%= active === 'employees' ? 'active' : '' %>">
+    <span class="tab-icon">👥</span>
+    <span>Staff</span>
+  </a>
+  <a href="/admin/shifts" class="admin-tab-link <%= active === 'shifts' ? 'active' : '' %>">
+    <span class="tab-icon">📋</span>
+    <span>Shifts</span>
+  </a>
+  <a href="/admin/schedule" class="admin-tab-link <%= active === 'schedule' ? 'active' : '' %>">
+    <span class="tab-icon">📅</span>
+    <span>Schedule</span>
+  </a>
+  <a href="/admin/reports" class="admin-tab-link <%= active === 'reports' ? 'active' : '' %>">
+    <span class="tab-icon">📊</span>
+    <span>Reports</span>
+  </a>
 </nav>

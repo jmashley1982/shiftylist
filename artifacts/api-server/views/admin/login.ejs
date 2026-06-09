@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Admin Login</title>
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -10,27 +10,29 @@
   <div class="page-center">
     <div class="card">
       <div class="logo">ShiftList</div>
-      <p class="subtitle">Admin Panel — enter your admin code</p>
+      <p class="subtitle">Admin access</p>
+
       <% if (error) { %>
         <div class="alert alert-error"><%= error %></div>
       <% } %>
+
       <form method="POST" action="/admin/login">
         <div class="form-group">
           <label for="adminCode">Admin Code</label>
           <input
-            type="text"
+            type="password"
             id="adminCode"
             name="adminCode"
             inputmode="numeric"
-            maxlength="8"
             placeholder="••••"
-            autocomplete="off"
+            autocomplete="current-password"
             autofocus
             required
           >
         </div>
-        <button type="submit" class="btn btn-primary btn-full">Login as Admin</button>
+        <button type="submit" class="btn btn-primary btn-full">Enter Admin Panel</button>
       </form>
+
       <div class="admin-link">
         <a href="/login">← Staff login</a>
       </div>
