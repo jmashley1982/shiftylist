@@ -573,14 +573,14 @@ tbody tr:hover { background: #fafbff; }
 }
 
 .admin-link a {
-  color: rgba(255,255,255,.5);
+  color: var(--muted);
   font-size: 0.82rem;
   text-decoration: none;
   font-weight: 500;
   transition: color 0.15s;
 }
 
-.admin-link a:hover { color: rgba(255,255,255,.85); }
+.admin-link a:hover { color: var(--brand); }
 
 .admin-return { text-align: center; margin-top: 16px; }
 .admin-return a {
