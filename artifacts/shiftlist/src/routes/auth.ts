@@ -35,7 +35,6 @@ router.post("/confirm-name", (req, res) => {
     const emp = req.session.pendingEmployee!;
     req.session.employeeId = emp.id;
     req.session.employeeName = emp.name;
-    req.session.employeeShift = emp.shift_name;
     req.session.employeeCode = emp.code;
     delete req.session.pendingEmployee;
     return void res.redirect("/staff/tasks");

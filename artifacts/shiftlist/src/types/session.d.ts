@@ -11,7 +11,6 @@ declare module "express-session" {
       id: number;
       name: string;
       code: string;
-      shift_name: string;
     };
   }
 }

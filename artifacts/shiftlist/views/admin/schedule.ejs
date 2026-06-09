@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Schedule Tasks</title>
+  <title>Schedule</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -11,70 +11,85 @@
   <div class="main-content">
     <div class="page-header" style="margin-top:12px;">
       <h1>Schedule</h1>
-      <p>One-off tasks for the next 14 days</p>
+      <p>Assign employees to shifts by day</p>
     </div>
 
     <div class="panel">
-      <div class="panel-header"><h2>Add Task</h2></div>
+      <div class="panel-header"><h2>Add Shift</h2></div>
       <% if (employees.length === 0) { %>
         <div class="alert alert-info" style="margin-bottom:0;">No employees yet. <a href="/admin/employees">Add staff first →</a></div>
+      <% } else if (shiftNames.length === 0) { %>
+        <div class="alert alert-info" style="margin-bottom:0;">No shift templates yet. <a href="/admin/shifts">Create shifts first →</a></div>
       <% } else { %>
         <form method="POST" action="/admin/schedule/add" class="form-stack">
           <div class="form-group">
+            <label>Date</label>
+            <input type="date" name="date" min="<%= today %>" max="<%= maxDate %>" value="<%= today %>" required>
+          </div>
+          <div class="form-group">
             <label>Employee</label>
             <select name="employee_id" required>
+              <option value="">Select employee…</option>
               <% employees.forEach(function(emp) { %>
-                <option value="<%= emp.id %>"><%= emp.name %> (<%= emp.shift_name %>)</option>
+                <option value="<%= emp.id %>"><%= emp.name %></option>
               <% }); %>
             </select>
           </div>
           <div class="form-group">
-            <label>Date</label>
-            <select name="target_date" required>
-              <% futureDates.forEach(function(d, i) { %>
-                <option value="<%= d %>" <%= i === 0 ? 'selected' : '' %>>
-                  <%= formatDateDisplay(d) %><%= i === 0 ? ' (Today)' : '' %>
-                </option>
+            <label>Shift</label>
+            <select name="shift_name" required>
+              <option value="">Select shift…</option>
+              <% shiftNames.forEach(function(s) { %>
+                <option value="<%= s %>"><%= s %></option>
               <% }); %>
             </select>
           </div>
-          <div class="form-group">
-            <label>Task Description</label>
-            <input type="text" name="task_text" placeholder="e.g. Deep clean fridges" required>
-          </div>
-          <button type="submit" class="btn btn-primary btn-full">Schedule Task</button>
+          <button type="submit" class="btn btn-primary btn-full">Assign Shift</button>
         </form>
       <% } %>
     </div>
 
-    <% if (scheduled.length > 0) { %>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Upcoming (<%= scheduled.length %>)</h2>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:10px;">
-          <% scheduled.forEach(function(task) { %>
-            <div style="display:flex; align-items:flex-start; gap:12px; padding-bottom:10px; border-bottom:1px solid var(--border);">
-              <div style="flex:1; min-width:0;">
-                <div style="font-weight:700; font-size:0.9rem; margin-bottom:4px;"><%= task.employee_name %></div>
-                <div style="font-size:0.85rem; color:var(--text); margin-bottom:4px;"><%= task.task_text %></div>
-                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                  <span class="date-badge <%= task.target_date === today ? 'date-badge-today' : '' %>">
-                    <%= formatDateDisplay(task.target_date) %><%= task.target_date === today ? ' · Today' : '' %>
-                  </span>
-                  <span class="shift-badge"><%= task.shift_name %></span>
-                </div>
-              </div>
-              <form method="POST" action="/admin/schedule/delete/<%= task.id %>" onsubmit="return confirm('Remove this task?')">
-                <button type="submit" class="btn btn-danger btn-sm">✕</button>
-              </form>
-            </div>
-          <% }); %>
-        </div>
+    <div class="panel" style="padding:0; overflow:hidden;">
+      <div style="padding:14px 18px; border-bottom:1px solid var(--border); background:var(--bg);">
+        <h2 style="color:var(--text); font-size:0.85rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Next 28 Days</h2>
       </div>
-    <% } else { %>
-      <div class="alert alert-info">No upcoming scheduled tasks.</div>
-    <% } %>
+      <% dayObjects.forEach(function(day, i) { %>
+        <div style="<%= day.isToday ? 'background:#fafbff;' : '' %> border-bottom:<%= i < dayObjects.length - 1 ? '1px solid var(--border)' : 'none' %>;">
+          <div style="display:flex; align-items:flex-start; gap:12px; padding:14px 18px;">
+
+            <!-- Date label -->
+            <div style="min-width:80px; padding-top:2px;">
+              <div style="font-size:0.88rem; font-weight:800; color:<%= day.isToday ? 'var(--brand)' : 'var(--text)' %>;">
+                <%= day.label.split(',')[0] %>
+              </div>
+              <div style="font-size:0.8rem; color:var(--muted); font-weight:500;">
+                <%= day.label.split(',').slice(1).join(',').trim() %>
+              </div>
+              <% if (day.isToday) { %>
+                <div style="font-size:0.68rem; font-weight:800; color:var(--brand); text-transform:uppercase; letter-spacing:0.4px; margin-top:2px;">Today</div>
+              <% } %>
+            </div>
+
+            <!-- Assignments -->
+            <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;">
+              <% if (day.assignments.length > 0) { %>
+                <% day.assignments.forEach(function(a) { %>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="flex:1; font-size:0.88rem; font-weight:600; color:var(--text-mid); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><%= a.employee_name %></span>
+                    <span class="shift-badge" style="flex-shrink:0; font-size:0.72rem; padding:3px 9px;"><%= a.shift_name %></span>
+                    <form method="POST" action="/admin/schedule/delete/<%= a.id %>" style="flex-shrink:0;">
+                      <button type="submit" class="btn btn-danger btn-sm" style="min-height:30px; padding:5px 10px; font-size:0.78rem;" onclick="return confirm('Remove this shift?')">✕</button>
+                    </form>
+                  </div>
+                <% }); %>
+              <% } else { %>
+                <span style="font-size:0.82rem; color:var(--muted-light); font-style:italic; padding-top:2px;">No assignments</span>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      <% }); %>
+    </div>
   </div>
 </body>
 </html>
