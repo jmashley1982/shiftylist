@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Shift Templates</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'shifts' }) %>
+  <div class="main-content">
+    <div class="page-header" style="margin-top:12px;">
+      <h1>Shift Templates</h1>
+      <p>Define tasks for each shift type</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><h2>New Shift Type</h2></div>
+      <form method="POST" action="/admin/shifts/add-shift" class="form-stack">
+        <div class="form-group">
+          <label>Shift Name</label>
+          <input type="text" name="shift_name" placeholder="e.g. Open, Mid, Close" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Create Shift</button>
+      </form>
+    </div>
+
+    <% if (shiftNames.length > 0) { %>
+      <div class="panel">
+        <div class="panel-header"><h2>Add Task</h2></div>
+        <form method="POST" action="/admin/shifts/add-task" class="form-stack">
+          <div class="form-group">
+            <label>Shift</label>
+            <select name="shift_name" required>
+              <% shiftNames.forEach(function(s) { %>
+                <option value="<%= s %>"><%= s %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Task Description</label>
+            <input type="text" name="task_text" placeholder="e.g. Count cash drawer" required>
+          </div>
+          <div class="form-group">
+            <label>Display Order</label>
+            <input type="number" name="display_order" placeholder="0" min="0" value="0">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">Add Task</button>
+        </form>
+      </div>
+
+      <% shiftNames.forEach(function(shiftName) { %>
+        <div class="panel">
+          <div class="panel-header">
+            <h2><span class="shift-badge" style="font-size:0.9rem;"><%= shiftName %></span></h2>
+            <span style="color:var(--muted); font-size:0.82rem;"><%= tasksByShift[shiftName].length %> tasks</span>
+          </div>
+          <% if (tasksByShift[shiftName].length > 0) { %>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <% tasksByShift[shiftName].forEach(function(task) { %>
+                <div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border);">
+                  <span style="color:var(--muted); font-size:0.78rem; font-weight:700; min-width:20px;">#<%= task.display_order %></span>
+                  <span style="flex:1; font-size:0.9rem;"><%= task.task_text %></span>
+                  <form method="POST" action="/admin/shifts/delete-task/<%= task.id %>" onsubmit="return confirm('Remove this task?')">
+                    <button type="submit" class="btn btn-danger btn-sm">✕</button>
+                  </form>
+                </div>
+              <% }); %>
+            </div>
+          <% } else { %>
+            <p style="color:var(--muted); font-size:0.88rem;">No tasks yet.</p>
+          <% } %>
+        </div>
+      <% }); %>
+    <% } else { %>
+      <div class="alert alert-info">Create a shift type above to get started.</div>
+    <% } %>
+  </div>
+</body>
+</html>

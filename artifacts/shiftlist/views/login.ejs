@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Staff Login</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page-center">
+    <div class="card">
+      <div class="logo">ShiftList</div>
+      <p class="subtitle">Enter your 4-digit code to start</p>
+
+      <% if (error) { %>
+        <div class="alert alert-error"><%= error %></div>
+      <% } %>
+
+      <form method="POST" action="/login">
+        <div class="form-group">
+          <label for="code">Your Code</label>
+          <input
+            type="text"
+            id="code"
+            name="code"
+            inputmode="numeric"
+            pattern="\d{4}"
+            maxlength="4"
+            placeholder="0 0 0 0"
+            autocomplete="off"
+            autofocus
+            required
+          >
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Log In →</button>
+      </form>
+
+      <div class="admin-link">
+        <a href="/admin/login">Admin access</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

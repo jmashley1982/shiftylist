@@ -1,5 +1,5 @@
 modules = ["nodejs-24"]
-run = "pnpm --filter @workspace/api-server run dev"
+run = "pnpm --filter @workspace/shiftlist run dev"
 
 [deployment]
 router = "application"
@@ -27,3 +27,7 @@ externalPort = 80
 [[ports]]
 localPort = 8081
 externalPort = 8081
+
+[[ports]]
+localPort = 19105
+externalPort = 3001

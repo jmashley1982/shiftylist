@@ -1,0 +1,1 @@
+- [Preview kind fix](preview-kind.md) — kind="api" artifacts are excluded from the Replit preview pane; only web/slides/video/mobile/design kinds appear.

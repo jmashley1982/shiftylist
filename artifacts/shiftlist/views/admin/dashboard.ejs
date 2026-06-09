@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'dashboard' }) %>
+  <div class="main-content">
+    <div class="page-header" style="margin-top:12px;">
+      <h1>Dashboard</h1>
+      <p>Overview of your team</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value"><%= employeeCount %></div>
+        <div class="stat-label">Staff</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value"><%= shiftNames.length %></div>
+        <div class="stat-label">Shift Types</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value"><%= upcomingCount %></div>
+        <div class="stat-label">Scheduled</div>
+      </div>
+    </div>
+
+    <% if (shiftNames.length > 0) { %>
+      <div class="panel">
+        <h2 style="margin-bottom:10px;">Shift Types</h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <% shiftNames.forEach(function(s) { %>
+            <span class="shift-badge" style="font-size:0.88rem; padding:6px 14px;"><%= s %></span>
+          <% }); %>
+        </div>
+      </div>
+    <% } else { %>
+      <div class="alert alert-info">
+        No shifts set up yet — go to <strong>Shifts</strong> to create templates.
+      </div>
+    <% } %>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <a href="/admin/employees" class="btn btn-outline btn-full">👥 Manage Staff</a>
+      <a href="/admin/shifts"    class="btn btn-outline btn-full">📋 Shift Templates</a>
+      <a href="/admin/schedule"  class="btn btn-outline btn-full">📅 Schedule Tasks</a>
+      <a href="/admin/reports"   class="btn btn-outline btn-full">📊 View Reports</a>
+    </div>
+  </div>
+</body>
+</html>

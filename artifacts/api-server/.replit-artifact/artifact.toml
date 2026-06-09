@@ -1,13 +1,13 @@
 kind = "api"
-previewPath = "/"
-title = "Staff Shift To-Do List"
+previewPath = "/__api-server"
+title = "Staff Shift To-Do List (legacy)"
 version = "1.0.0"
 id = "3B4_FFSkEVBkAeYMFRJ2e"
 
 [[services]]
 localPort = 8080
 name = "API Server"
-paths = ["/"]
+paths = ["/__api-server"]
 
 [services.development]
 run = "pnpm --filter @workspace/api-server run dev"

@@ -1,0 +1,39 @@
+kind = "web"
+previewPath = "/"
+title = "ShiftList"
+version = "1.0.0"
+id = "artifacts/shiftlist"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = ["/"]
+localPort = 19105
+
+[services.env]
+PORT = "19105"
+
+[services.development]
+run = "pnpm --filter @workspace/shiftlist run dev"
+
+[services.production]
+
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/shiftlist", "run", "build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+
+[services.production.run]
+args = ["node", "--enable-source-maps", "artifacts/shiftlist/dist/index.mjs"]
+
+[services.production.run.env]
+PORT = "19105"
+NODE_ENV = "production"
+
+[services.production.health.startup]
+path = "/healthz"

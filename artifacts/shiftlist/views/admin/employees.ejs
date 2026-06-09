@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Staff</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'employees' }) %>
+  <div class="main-content">
+    <div class="page-header" style="margin-top:12px;">
+      <h1>Staff</h1>
+      <p><%= employees.length %> employees</p>
+    </div>
+
+    <% if (error) { %>
+      <div class="alert alert-error"><%= error %></div>
+    <% } %>
+
+    <div class="panel">
+      <div class="panel-header"><h2>Add Employee</h2></div>
+      <% if (shiftNames.length === 0) { %>
+        <div class="alert alert-info" style="margin-bottom:0;">Create shift templates first before adding staff.</div>
+      <% } else { %>
+        <form method="POST" action="/admin/employees/add" class="form-stack">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" name="name" placeholder="Jane Smith" required>
+          </div>
+          <div class="form-group">
+            <label>4-Digit Login Code</label>
+            <input type="text" name="code" placeholder="1234" maxlength="4" pattern="\d{4}" inputmode="numeric" required>
+          </div>
+          <div class="form-group">
+            <label>Shift</label>
+            <select name="shift_name" required>
+              <option value="">Select shift…</option>
+              <% shiftNames.forEach(function(s) { %>
+                <option value="<%= s %>"><%= s %></option>
+              <% }); %>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">Add Employee</button>
+        </form>
+      <% } %>
+    </div>
+
+    <% if (employees.length > 0) { %>
+      <% employees.forEach(function(emp) { %>
+        <div class="panel" style="padding:14px 16px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:700; font-size:0.97rem;"><%= emp.name %></div>
+              <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                <code style="background:var(--bg); padding:2px 8px; border-radius:6px; font-size:0.85rem; letter-spacing:2px;"><%= emp.code %></code>
+                <span class="shift-badge"><%= emp.shift_name %></span>
+              </div>
+            </div>
+            <form method="POST" action="/admin/employees/delete/<%= emp.id %>" onsubmit="return confirm('Delete <%= emp.name %>?')">
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+          </div>
+        </div>
+      <% }); %>
+    <% } else { %>
+      <div class="alert alert-info">No employees yet — add one above.</div>
+    <% } %>
+  </div>
+</body>
+</html>

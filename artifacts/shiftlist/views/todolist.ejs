@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>My Tasks</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <span class="brand">ShiftList</span>
+    <div class="navbar-right">
+      <span class="navbar-user"><%= employeeName %></span>
+      <a href="/logout" class="btn btn-ghost btn-sm" style="min-height:36px;padding:7px 12px;">Out</a>
+    </div>
+  </nav>
+
+  <div class="main-content-notabs">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; margin-top:8px;">
+      <div>
+        <h1 style="font-size:1.2rem;">Today's Tasks</h1>
+        <% if (coveringFor) { %>
+          <p style="font-size:0.8rem; color:var(--warning); font-weight:600; margin-top:2px;">Covering: <%= coveringFor %></p>
+        <% } %>
+      </div>
+      <span class="shift-badge"><%= shift %></span>
+    </div>
+
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progressBar" style="width:0%"></div>
+    </div>
+
+    <ul class="task-list" id="taskList">
+      <% tasks.forEach(function(task, idx) { %>
+        <li class="task-item" id="task-<%= idx %>" onclick="toggleTask(<%= idx %>)">
+          <div class="task-checkbox" id="cb-<%= idx %>"></div>
+          <span class="task-text" id="text-<%= idx %>"><%= task.text %></span>
+          <span class="task-time" id="time-<%= idx %>"></span>
+        </li>
+      <% }); %>
+    </ul>
+
+    <div style="padding-bottom: 80px;">
+      <button class="btn btn-success btn-full" id="submitBtn" onclick="submitShift()">
+        Submit Shift Report
+      </button>
+      <p style="text-align:center; font-size:0.78rem; color:var(--muted); margin-top:8px;" id="progressText">
+        0 / <%= tasks.length %> completed
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const taskData = <%- JSON.stringify(tasks.map(function(t){ return { text: t.text, completed: false, completionTime: null }; })) %>;
+
+    function updateProgress() {
+      const done = taskData.filter(function(t){ return t.completed; }).length;
+      const pct = taskData.length ? Math.round(done / taskData.length * 100) : 0;
+      document.getElementById('progressBar').style.width = pct + '%';
+      document.getElementById('progressText').textContent = done + ' / ' + taskData.length + ' completed';
+    }
+
+    function toggleTask(idx) {
+      const completed = !taskData[idx].completed;
+      const time = completed ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+      taskData[idx].completed = completed;
+      taskData[idx].completionTime = time;
+
+      const item = document.getElementById('task-' + idx);
+      const cb   = document.getElementById('cb-' + idx);
+      item.classList.toggle('done', completed);
+      cb.classList.toggle('checked', completed);
+      cb.textContent = completed ? '✓' : '';
+      document.getElementById('time-' + idx).textContent = time ? time : '';
+      updateProgress();
+    }
+
+    async function submitShift() {
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.textContent = 'Submitting…';
+      try {
+        const res = await fetch('/staff/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'tasks=' + encodeURIComponent(JSON.stringify(taskData))
+        });
+        if (res.ok) {
+          document.open(); document.write(await res.text()); document.close();
+        } else {
+          alert('Error submitting. Please try again.');
+          btn.disabled = false;
+          btn.textContent = 'Submit Shift Report';
+        }
+      } catch(e) {
+        alert('Network error. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Submit Shift Report';
+      }
+    }
+
+    updateProgress();
+  </script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>No Tasks Today</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <span class="brand">ShiftList</span>
+    <a href="/logout" class="btn btn-ghost btn-sm" style="min-height:36px;padding:7px 12px;">Log out</a>
+  </nav>
+  <div class="page-center" style="min-height: calc(100dvh - 56px);">
+    <div class="card">
+      <div style="font-size:2.5rem; text-align:center; margin-bottom:12px;">📋</div>
+      <h1 style="text-align:center; margin-bottom:6px;">No tasks today</h1>
+      <p style="text-align:center; color:var(--muted); font-size:0.88rem; margin-bottom:24px;">
+        Hi <strong><%= employeeName %></strong> — you have no tasks assigned for today.
+      </p>
+
+      <% if (employees && employees.length > 0) { %>
+        <p style="font-size:0.88rem; font-weight:700; margin-bottom:10px;">Covering someone's shift?</p>
+        <form method="POST" action="/staff/cover">
+          <div class="form-group">
+            <label for="targetEmployeeId">Who are you covering for?</label>
+            <select name="targetEmployeeId" id="targetEmployeeId" required>
+              <% employees.forEach(function(emp) { %>
+                <option value="<%= emp.id %>"><%= emp.name %> — <%= emp.shift_name %></option>
+              <% }); %>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full" style="margin-bottom:10px;">Cover Their Shift</button>
+        </form>
+        <a href="/logout" class="btn btn-ghost btn-full" style="text-align:center;">See Manager</a>
+      <% } else { %>
+        <div class="alert alert-info">No other employees found. Please see your manager.</div>
+        <a href="/logout" class="btn btn-ghost btn-full">Log Out</a>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

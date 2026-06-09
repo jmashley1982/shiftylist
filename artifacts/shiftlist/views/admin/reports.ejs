@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Reports</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'reports' }) %>
+  <div class="main-content">
+    <div class="page-header" style="margin-top:12px;">
+      <h1>Reports</h1>
+      <p>Submissions from the last 30 days</p>
+    </div>
+
+    <% if (!process.env.SPREADSHEET_ID) { %>
+      <div class="alert alert-error">
+        Google Sheets not connected. Set <strong>SPREADSHEET_ID</strong>, <strong>GOOGLE_SHEETS_CLIENT_EMAIL</strong>, and <strong>GOOGLE_SHEETS_PRIVATE_KEY</strong> in Secrets.
+      </div>
+    <% } %>
+
+    <% if (submissions.length > 0) { %>
+      <% submissions.forEach(function(row) { %>
+        <div class="panel" style="padding:14px 16px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-weight:700; font-size:0.97rem;"><%= row[2] || '—' %></span>
+            <span class="shift-badge"><%= row[3] || '—' %></span>
+          </div>
+          <div style="font-size:0.8rem; color:var(--muted); margin-bottom:6px;">
+            <%= row[4] || '—' %> &nbsp;·&nbsp;
+            <%= row[0] ? new Date(row[0]).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—' %>
+            &nbsp;·&nbsp; Code:
+            <code style="background:var(--bg); padding:1px 6px; border-radius:4px;"><%= row[1] || '—' %></code>
+          </div>
+          <% if (row[5]) { %>
+            <p style="font-size:0.82rem; color:var(--muted); line-height:1.5;"><%= row[5] %></p>
+          <% } %>
+        </div>
+      <% }); %>
+    <% } else { %>
+      <div class="alert alert-info">
+        <% if (process.env.SPREADSHEET_ID) { %>
+          No submissions found in the last 30 days.
+        <% } else { %>
+          Configure Google Sheets to see reports here.
+        <% } %>
+      </div>
+    <% } %>
+  </div>
+</body>
+</html>
