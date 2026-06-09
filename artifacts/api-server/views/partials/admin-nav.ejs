@@ -1,0 +1,11 @@
+<nav class="navbar">
+  <a href="/admin/dashboard" class="brand">ShiftList Admin</a>
+  <div class="nav-links">
+    <a href="/admin/dashboard" class="nav-link <%= active === 'dashboard' ? 'active' : '' %>">Dashboard</a>
+    <a href="/admin/employees" class="nav-link <%= active === 'employees' ? 'active' : '' %>">Employees</a>
+    <a href="/admin/shifts" class="nav-link <%= active === 'shifts' ? 'active' : '' %>">Shifts</a>
+    <a href="/admin/schedule" class="nav-link <%= active === 'schedule' ? 'active' : '' %>">Schedule</a>
+    <a href="/admin/reports" class="nav-link <%= active === 'reports' ? 'active' : '' %>">Reports</a>
+    <a href="/admin/logout" class="nav-link" style="color:var(--danger);">Logout</a>
+  </div>
+</nav>

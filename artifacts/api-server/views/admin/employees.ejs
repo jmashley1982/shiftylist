@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Employees</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'employees' }) %>
+  <div class="main-content">
+    <h1 style="margin-bottom:24px;">Employees</h1>
+
+    <% if (error) { %>
+      <div class="alert alert-error"><%= error %></div>
+    <% } %>
+
+    <div class="panel">
+      <div class="panel-header"><h2 style="margin:0;">Add Employee</h2></div>
+      <form method="POST" action="/admin/employees/add">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" name="name" placeholder="Jane Smith" required>
+          </div>
+          <div class="form-group">
+            <label>4-Digit Code</label>
+            <input type="text" name="code" placeholder="1234" maxlength="4" pattern="\d{4}" inputmode="numeric" required>
+          </div>
+          <div class="form-group">
+            <label>Shift</label>
+            <select name="shift_name" required>
+              <option value="">Select shift…</option>
+              <% shiftNames.forEach(function(s) { %>
+                <option value="<%= s %>"><%= s %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <button type="submit" class="btn btn-primary">Add Employee</button>
+          </div>
+        </div>
+      </form>
+      <% if (shiftNames.length === 0) { %>
+        <p style="color:var(--warning);font-size:0.85rem;margin-top:8px;">
+          No shifts set up yet — <a href="/admin/shifts">create shift templates first</a>.
+        </p>
+      <% } %>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2 style="margin:0;">All Employees (<%= employees.length %>)</h2>
+      </div>
+      <% if (employees.length > 0) { %>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Code</th>
+                <th>Shift</th>
+                <th style="width:80px;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% employees.forEach(function(emp) { %>
+                <tr>
+                  <td style="font-weight:600;"><%= emp.name %></td>
+                  <td><code style="background:var(--bg);padding:2px 8px;border-radius:4px;font-size:0.9rem;"><%= emp.code %></code></td>
+                  <td><span class="shift-badge"><%= emp.shift_name %></span></td>
+                  <td>
+                    <form method="POST" action="/admin/employees/delete/<%= emp.id %>" onsubmit="return confirm('Delete <%= emp.name %>?')">
+                      <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    </form>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } else { %>
+        <p style="color:var(--muted);font-size:0.9rem;">No employees yet. Add one above.</p>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

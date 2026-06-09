@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shift Reports</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'reports' }) %>
+  <div class="main-content">
+    <h1 style="margin-bottom:8px;">Shift Reports</h1>
+    <p class="subtitle" style="margin-bottom:24px;">Submissions from the last 30 days, fetched from Google Sheets.</p>
+
+    <% if (!process.env.SPREADSHEET_ID) { %>
+      <div class="alert alert-error">
+        Google Sheets not configured. Set <strong>SPREADSHEET_ID</strong>, <strong>GOOGLE_SHEETS_CLIENT_EMAIL</strong>, and <strong>GOOGLE_SHEETS_PRIVATE_KEY</strong> in your environment secrets to enable reports.
+      </div>
+    <% } %>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2 style="margin:0;">Recent Submissions (<%= submissions.length %>)</h2>
+      </div>
+      <% if (submissions.length > 0) { %>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Employee</th>
+                <th>Code</th>
+                <th>Shift</th>
+                <th>Date</th>
+                <th>Tasks Summary</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% submissions.forEach(function(row) { %>
+                <tr>
+                  <td style="white-space:nowrap;font-size:0.82rem;color:var(--muted);">
+                    <%= row[0] ? new Date(row[0]).toLocaleString() : '—' %>
+                  </td>
+                  <td style="font-weight:600;"><%= row[2] || '—' %></td>
+                  <td><code style="background:var(--bg);padding:2px 6px;border-radius:4px;"><%= row[1] || '—' %></code></td>
+                  <td><span class="shift-badge"><%= row[3] || '—' %></span></td>
+                  <td style="white-space:nowrap;"><%= row[4] || '—' %></td>
+                  <td style="font-size:0.82rem;color:var(--muted);max-width:320px;white-space:normal;"><%= row[5] || '—' %></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } else { %>
+        <p style="color:var(--muted);font-size:0.9rem;">
+          <% if (process.env.SPREADSHEET_ID) { %>
+            No submissions found in the last 30 days.
+          <% } else { %>
+            Configure Google Sheets to see reports here.
+          <% } %>
+        </p>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

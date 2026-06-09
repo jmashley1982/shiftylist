@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shift Tasks — <%= employeeName %></title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <span class="brand">ShiftList</span>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="font-size:0.88rem; color:var(--muted)">Hi, <strong><%= employeeName %></strong></span>
+      <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
+    </div>
+  </nav>
+  <div class="main-content">
+    <div class="task-header">
+      <div>
+        <h1>Today's Tasks</h1>
+        <% if (coveringFor) { %>
+          <p style="color:var(--warning);font-size:0.85rem;margin-top:4px;">Covering: <strong><%= coveringFor %></strong> shift</p>
+        <% } %>
+      </div>
+      <span class="shift-badge"><%= shift %></span>
+    </div>
+
+    <div class="alert alert-info" style="font-size:0.85rem;">
+      Check off each task as you complete it, then submit your report at the end of your shift.
+    </div>
+
+    <ul class="task-list" id="taskList">
+      <% tasks.forEach(function(task, idx) { %>
+        <li class="task-item" id="task-<%= idx %>" onclick="toggleTask(<%= idx %>, this)">
+          <input type="checkbox" id="cb-<%= idx %>" data-idx="<%= idx %>" data-text="<%= task.text.replace(/"/g, '&quot;') %>" onclick="event.stopPropagation()">
+          <span class="task-text"><%= task.text %></span>
+          <span class="task-time" id="time-<%= idx %>"></span>
+        </li>
+      <% }); %>
+    </ul>
+
+    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+      <button class="btn btn-success" id="submitBtn" onclick="submitShift()">
+        Submit Shift Report
+      </button>
+      <span id="progressText" style="color:var(--muted);font-size:0.85rem;"></span>
+    </div>
+  </div>
+
+  <script>
+    const taskData = <%- JSON.stringify(tasks.map(t => ({ text: t.text, completed: false, completionTime: null }))) %>;
+
+    function updateProgress() {
+      const done = taskData.filter(t => t.completed).length;
+      document.getElementById('progressText').textContent =
+        done + ' / ' + taskData.length + ' completed';
+    }
+
+    function toggleTask(idx, el) {
+      const cb = document.getElementById('cb-' + idx);
+      cb.checked = !cb.checked;
+      const completed = cb.checked;
+      const time = completed ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+      taskData[idx].completed = completed;
+      taskData[idx].completionTime = time;
+      el.classList.toggle('done', completed);
+      document.getElementById('time-' + idx).textContent = time ? '✓ ' + time : '';
+      updateProgress();
+    }
+
+    document.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+      cb.addEventListener('change', function(e) {
+        e.stopPropagation();
+        const idx = parseInt(this.dataset.idx);
+        const completed = this.checked;
+        const time = completed ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+        taskData[idx].completed = completed;
+        taskData[idx].completionTime = time;
+        const item = document.getElementById('task-' + idx);
+        item.classList.toggle('done', completed);
+        document.getElementById('time-' + idx).textContent = time ? '✓ ' + time : '';
+        updateProgress();
+      });
+    });
+
+    async function submitShift() {
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+      try {
+        const res = await fetch('/staff/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'tasks=' + encodeURIComponent(JSON.stringify(taskData))
+        });
+        if (res.ok) {
+          document.open();
+          document.write(await res.text());
+          document.close();
+        } else {
+          const msg = await res.text();
+          alert('Error: ' + msg);
+          btn.disabled = false;
+          btn.textContent = 'Submit Shift Report';
+        }
+      } catch (err) {
+        alert('Network error. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Submit Shift Report';
+      }
+    }
+
+    updateProgress();
+  </script>
+</body>
+</html>

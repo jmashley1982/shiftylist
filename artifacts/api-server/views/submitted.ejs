@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report Submitted</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page-center">
+    <div class="card" style="max-width:500px; text-align:center;">
+      <div class="success-icon">✅</div>
+      <h1>Report Submitted!</h1>
+      <p class="subtitle">Your shift report has been logged to Google Sheets.</p>
+      <div style="background:var(--bg); border-radius:8px; padding:16px; margin:20px 0; text-align:left;">
+        <p style="font-size:0.85rem; color:var(--muted); margin-bottom:8px;">
+          <strong><%= employeeName %></strong> &mdash; <%= shift %> shift &mdash; <%= date %>
+        </p>
+        <ul style="list-style:none; display:flex; flex-direction:column; gap:6px;">
+          <% tasks.forEach(function(t) { %>
+            <li style="font-size:0.88rem; display:flex; align-items:center; gap:8px;">
+              <span style="color:<%= t.completed ? 'var(--success)' : 'var(--danger)' %>">
+                <%= t.completed ? '✓' : '✗' %>
+              </span>
+              <span style="<%= t.completed ? '' : 'color:var(--muted)' %>"><%= t.text %></span>
+              <% if (t.completionTime) { %>
+                <span style="color:var(--muted); font-size:0.78rem; margin-left:auto;"><%= t.completionTime %></span>
+              <% } %>
+            </li>
+          <% }); %>
+        </ul>
+      </div>
+      <a href="/logout" class="btn btn-primary btn-full">Log Out</a>
+    </div>
+  </div>
+</body>
+</html>

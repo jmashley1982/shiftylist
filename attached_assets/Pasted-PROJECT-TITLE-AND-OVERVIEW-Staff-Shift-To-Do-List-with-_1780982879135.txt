@@ -1,0 +1,510 @@
+PROJECT TITLE AND OVERVIEW
+===========================
+Staff Shift To-Do List with Google Sheets Logging
+- Internal web app for staff to view daily shift tasks, tick off completion (with time logging), and submit final report to Google Sheets.
+- Admin panel to manage employees (name + 4-digit code + assigned shift), manage shift task templates (Open, Mid, Close), schedule one‑off tasks for specific employees on specific dates (next 14 days only), view submitted reports (last 30 days) and covering shift workflow.
+
+TECH STACK (exact versions)
+============================
+- Runtime: Node.js (20.x)
+- Framework: Express 4.18.2
+- Template engine: EJS 3.1.9
+- Database: SQLite3 (better-sqlite3 9.0.0) – stores employees, shifts, task templates, scheduled one‑off tasks.
+- Authentication: session-based (express-session 1.17.3) with 4-digit codes.
+- Google Sheets API: googleapis 126.0.0 (service account)
+- Date handling: date-fns 2.30.0
+- Other: dotenv 16.3.1, body-parser 1.20.2
+
+FILE & FOLDER STRUCTURE
+========================
+project-root/
+├── .replit
+├── .env.example
+├── package.json
+├── server.js
+├── db/
+│   └── init.sql
+├── routes/
+│   ├── auth.js
+│   ├── staff.js
+│   └── admin.js
+├── views/
+│   ├── login.ejs
+│   ├── confirmName.ejs
+│   ├── todolist.ejs
+│   ├── noTasks.ejs
+│   ├── admin/
+│   │   ├── dashboard.ejs
+│   │   ├── employees.ejs
+│   │   ├── shifts.ejs
+│   │   ├── tasks.ejs
+│   │   ├── schedule.ejs
+│   │   └── reports.ejs
+├── public/
+│   └── style.css
+├── utils/
+│   ├── sheets.js
+│   └── dateHelpers.js
+└── middleware/
+    └── auth.js
+
+STEP-BY-STEP IMPLEMENTATION INSTRUCTIONS
+=========================================
+
+Step 1: Initialize project and install dependencies
+----------------------------------------------------
+Run these terminal commands in order:
+mkdir staff-todolist && cd staff-todolist
+npm init -y
+npm install express ejs better-sqlite3 express-session body-parser dotenv googleapis date-fns
+
+Step 2: Create configuration files
+-----------------------------------
+Create .replit:
+
+run = "npm start"
+entrypoint = "server.js"
+text
+
+
+Create .env.example:
+
+SESSION_SECRET=your_random_secret_here
+GOOGLE_SHEETS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_SHEETS_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com
+SPREADSHEET_ID=your_google_sheet_id
+ADMIN_CODE=1234
+text
+
+
+Step 3: Database schema (db/init.sql)
+--------------------------------------
+```sql
+CREATE TABLE IF NOT EXISTS employees (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  code TEXT UNIQUE NOT NULL,
+  shift_name TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS shift_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  shift_name TEXT UNIQUE NOT NULL,
+  task_text TEXT NOT NULL,
+  display_order INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL,
+  target_date TEXT NOT NULL, -- YYYY-MM-DD
+  task_text TEXT NOT NULL,
+  completed_by_admin BOOLEAN DEFAULT 0,
+  FOREIGN KEY(employee_id) REFERENCES employees(id)
+);
+
+Create db/init.js to run this once (called in server.js):
+js
+
+const Database = require('better-sqlite3');
+const db = new Database('shiftdb.sqlite');
+db.exec(require('fs').readFileSync('./db/init.sql', 'utf8'));
+console.log('Database initialized');
+
+Step 4: Main server file (server.js)
+js
+
+require('dotenv').config();
+const express = require('express');
+const session = require('express-session');
+const bodyParser = require('body-parser');
+const path = require('path');
+const db = require('./db/init');
+const authRoutes = require('./routes/auth');
+const staffRoutes = require('./routes/staff');
+const adminRoutes = require('./routes/admin');
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.set('view engine', 'ejs');
+app.use(express.static('public'));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 8 * 60 * 60 * 1000 } // 8 hours
+}));
+
+app.use('/', authRoutes);
+app.use('/staff', staffRoutes);
+app.use('/admin', adminRoutes);
+
+app.listen(port, () => console.log(`Server running on port ${port}`));
+
+Step 5: Database connection helper (db/init.js)
+
+Create db/init.js (same code as step 3 but exported):
+js
+
+const Database = require('better-sqlite3');
+const fs = require('fs');
+const db = new Database('shiftdb.sqlite');
+const initSql = fs.readFileSync('./db/init.sql', 'utf8');
+db.exec(initSql);
+module.exports = db;
+
+Step 6: Utility – Google Sheets (utils/sheets.js)
+js
+
+const { google } = require('googleapis');
+
+async function appendToSheet(submission) {
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_SHEETS_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    },
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+  const sheets = google.sheets({ version: 'v4', auth });
+  const values = [[
+    submission.timestamp,
+    submission.userCode,
+    submission.employeeName,
+    submission.shift,
+    submission.date,
+    JSON.stringify(submission.tasks)
+  ]];
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.SPREADSHEET_ID,
+    range: 'Submissions!A:F',
+    valueInputOption: 'USER_ENTERED',
+    resource: { values },
+  });
+}
+
+async function getSubmissionsLast30Days() {
+  // Fetch rows from Sheets, filter last 30 days
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_SHEETS_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    },
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+  });
+  const sheets = google.sheets({ version: 'v4', auth });
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.SPREADSHEET_ID,
+    range: 'Submissions!A:F',
+  });
+  const rows = response.data.values || [];
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  return rows.slice(1).filter(row => new Date(row[0]) >= thirtyDaysAgo);
+}
+
+module.exports = { appendToSheet, getSubmissionsLast30Days };
+
+Step 7: Date helpers (utils/dateHelpers.js)
+js
+
+const { format, addDays, isWithinInterval, startOfDay } = require('date-fns');
+
+function getTodayStr() { return format(new Date(), 'yyyy-MM-dd'); }
+
+function getNext14Days() {
+  const days = [];
+  for (let i = 0; i <= 14; i++) {
+    days.push(format(addDays(new Date(), i), 'yyyy-MM-dd'));
+  }
+  return days;
+}
+
+module.exports = { getTodayStr, getNext14Days };
+
+Step 8: Authentication middleware (middleware/auth.js)
+js
+
+function ensureStaffAuth(req, res, next) {
+  if (req.session.employeeId) return next();
+  res.redirect('/login');
+}
+function ensureAdminAuth(req, res, next) {
+  if (req.session.isAdmin) return next();
+  res.redirect('/admin/login');
+}
+module.exports = { ensureStaffAuth, ensureAdminAuth };
+
+Step 9: Auth routes (routes/auth.js)
+js
+
+const express = require('express');
+const router = express.Router();
+const db = require('../db/init');
+const { getTodayStr } = require('../utils/dateHelpers');
+
+router.get('/login', (req, res) => { res.render('login'); });
+router.post('/login', (req, res) => {
+  const { code } = req.body;
+  const employee = db.prepare('SELECT * FROM employees WHERE code = ?').get(code);
+  if (!employee) return res.send('Invalid code');
+  req.session.pendingCode = code;
+  req.session.pendingEmployee = employee;
+  res.redirect('/confirm-name');
+});
+router.get('/confirm-name', (req, res) => {
+  if (!req.session.pendingEmployee) return res.redirect('/login');
+  res.render('confirmName', { employee: req.session.pendingEmployee });
+});
+router.post('/confirm-name', (req, res) => {
+  if (req.body.confirm === 'yes') {
+    const emp = req.session.pendingEmployee;
+    req.session.employeeId = emp.id;
+    req.session.employeeName = emp.name;
+    req.session.employeeShift = emp.shift_name;
+    req.session.employeeCode = emp.code;
+    delete req.session.pendingEmployee;
+    delete req.session.pendingCode;
+    res.redirect('/staff/tasks');
+  } else {
+    res.redirect('/login');
+  }
+});
+// Admin login uses a simple hardcoded route
+router.get('/admin/login', (req, res) => { res.render('admin/login'); });
+router.post('/admin/login', (req, res) => {
+  if (req.body.adminCode === process.env.ADMIN_CODE) {
+    req.session.isAdmin = true;
+    res.redirect('/admin/dashboard');
+  } else { res.send('Invalid admin code'); }
+});
+router.get('/admin/logout', (req, res) => { req.session.destroy(); res.redirect('/login'); });
+module.exports = router;
+
+Step 10: Staff routes (routes/staff.js)
+js
+
+const express = require('express');
+const router = express.Router();
+const db = require('../db/init');
+const { ensureStaffAuth } = require('../middleware/auth');
+const { getTodayStr } = require('../utils/dateHelpers');
+const { appendToSheet } = require('../utils/sheets');
+
+router.get('/tasks', ensureStaffAuth, (req, res) => {
+  const empId = req.session.employeeId;
+  const today = getTodayStr();
+  const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(empId);
+  
+  // Check if employee has any scheduled tasks for today OR if their shift template exists for today
+  const scheduled = db.prepare('SELECT task_text FROM scheduled_tasks WHERE employee_id = ? AND target_date = ?').all(empId, today);
+  const shiftTasks = db.prepare('SELECT task_text FROM shift_templates WHERE shift_name = ? ORDER BY display_order').all(employee.shift_name);
+  
+  let allTasks = [...shiftTasks.map(t => ({ text: t.task_text, completed: false, completionTime: null })), ...scheduled.map(t => ({ text: t.task_text, completed: false, completionTime: null }))];
+  if (allTasks.length === 0) {
+    // No tasks assigned for today → prompt covering shift
+    return res.render('noTasks', { employeeName: req.session.employeeName });
+  }
+  res.render('todolist', { tasks: allTasks, employeeName: req.session.employeeName, shift: employee.shift_name });
+});
+
+router.post('/submit', ensureStaffAuth, async (req, res) => {
+  const { tasks } = req.body; // tasks is JSON string of [{text, completed, completionTime}]
+  const submission = {
+    timestamp: new Date().toISOString(),
+    userCode: req.session.employeeCode,
+    employeeName: req.session.employeeName,
+    shift: req.session.employeeShift,
+    date: getTodayStr(),
+    tasks: JSON.parse(tasks)
+  };
+  await appendToSheet(submission);
+  res.send('Submitted to Google Sheet');
+});
+
+// Covering shift endpoint – accepts a target employee id
+router.post('/cover', ensureStaffAuth, (req, res) => {
+  const { targetEmployeeId } = req.body;
+  const targetEmp = db.prepare('SELECT * FROM employees WHERE id = ?').get(targetEmployeeId);
+  if (!targetEmp) return res.status(400).send('Invalid employee');
+  req.session.employeeShift = targetEmp.shift_name;
+  req.session.coveringFor = targetEmp.id;
+  res.redirect('/staff/tasks');
+});
+module.exports = router;
+
+Step 11: Admin routes (routes/admin.js)
+js
+
+const express = require('express');
+const router = express.Router();
+const db = require('../db/init');
+const { ensureAdminAuth } = require('../middleware/auth');
+const { getNext14Days, getTodayStr } = require('../utils/dateHelpers');
+const { getSubmissionsLast30Days } = require('../utils/sheets');
+
+router.use(ensureAdminAuth);
+
+router.get('/dashboard', (req, res) => { res.render('admin/dashboard'); });
+// Employees management
+router.get('/employees', (req, res) => {
+  const employees = db.prepare('SELECT * FROM employees').all();
+  const shifts = db.prepare('SELECT DISTINCT shift_name FROM shift_templates').all();
+  res.render('admin/employees', { employees, shifts });
+});
+router.post('/employees/add', (req, res) => {
+  const { name, code, shift_name } = req.body;
+  db.prepare('INSERT INTO employees (name, code, shift_name) VALUES (?, ?, ?)').run(name, code, shift_name);
+  res.redirect('/admin/employees');
+});
+router.post('/employees/delete/:id', (req, res) => {
+  db.prepare('DELETE FROM employees WHERE id = ?').run(req.params.id);
+  res.redirect('/admin/employees');
+});
+// Shift templates
+router.get('/shifts', (req, res) => {
+  const shifts = db.prepare('SELECT DISTINCT shift_name FROM shift_templates').all();
+  const tasks = db.prepare('SELECT * FROM shift_templates ORDER BY shift_name, display_order').all();
+  res.render('admin/shifts', { shifts, tasks });
+});
+router.post('/shifts/addTask', (req, res) => {
+  const { shift_name, task_text, display_order } = req.body;
+  db.prepare('INSERT INTO shift_templates (shift_name, task_text, display_order) VALUES (?, ?, ?)').run(shift_name, task_text, display_order);
+  res.redirect('/admin/shifts');
+});
+router.post('/shifts/deleteTask/:id', (req, res) => {
+  db.prepare('DELETE FROM shift_templates WHERE id = ?').run(req.params.id);
+  res.redirect('/admin/shifts');
+});
+// Schedule one‑off tasks for employees (next 14 days)
+router.get('/schedule', (req, res) => {
+  const employees = db.prepare('SELECT id, name, shift_name FROM employees').all();
+  const futureDates = getNext14Days();
+  const scheduled = db.prepare('SELECT * FROM scheduled_tasks').all();
+  res.render('admin/schedule', { employees, futureDates, scheduled, today: getTodayStr() });
+});
+router.post('/schedule/add', (req, res) => {
+  const { employee_id, target_date, task_text } = req.body;
+  db.prepare('INSERT INTO scheduled_tasks (employee_id, target_date, task_text) VALUES (?, ?, ?)').run(employee_id, target_date, task_text);
+  res.redirect('/admin/schedule');
+});
+router.post('/schedule/delete/:id', (req, res) => {
+  db.prepare('DELETE FROM scheduled_tasks WHERE id = ?').run(req.params.id);
+  res.redirect('/admin/schedule');
+});
+// Reports – last 30 days from Google Sheets
+router.get('/reports', async (req, res) => {
+  const submissions = await getSubmissionsLast30Days();
+  res.render('admin/reports', { submissions });
+});
+module.exports = router;
+
+Step 12: EJS Templates (views/)
+
+Create each file with content:
+
+views/login.ejs
+html
+
+<!DOCTYPE html>
+<html><head><title>Login</title><link rel="stylesheet" href="/style.css"></head>
+<body><div class="container"><h1>Staff Login</h1><form method="POST" action="/login">
+<input type="text" name="code" placeholder="Enter 4-digit code" maxlength="4" required>
+<button type="submit">Login</button></form>
+<a href="/admin/login">Admin Login</a></div></body></html>
+
+views/confirmName.ejs
+html
+
+<!DOCTYPE html>
+<html><head><title>Confirm Identity</title><link rel="stylesheet" href="/style.css"></head>
+<body><div class="container"><h1>Are you <%= employee.name %> ?</h1>
+<form method="POST" action="/confirm-name"><input type="hidden" name="confirm" value="yes"><button type="submit">Yes, that's me</button></form>
+<form method="POST" action="/confirm-name"><input type="hidden" name="confirm" value="no"><button type="submit">No, wrong person</button></form></div></body></html>
+
+views/todolist.ejs
+html
+
+<!DOCTYPE html>
+<html><head><title>To-Do List - <%= employeeName %></title><link rel="stylesheet" href="/style.css"></head>
+<body><div class="container"><h2>Shift: <%= shift %></h2>
+<form id="todoForm"><ul id="taskList"><% tasks.forEach((task, idx) => { %>
+<li><input type="checkbox" data-idx="<%= idx %>" data-text="<%= task.text %>"> <%= task.text %> <span class="time"></span></li>
+<% }); %></ul><button type="button" id="submitBtn">Submit Shift Report</button></form>
+<script>let tasks = []; document.querySelectorAll('input[type="checkbox"]').forEach((cb, i) => { cb.addEventListener('change', function() { let time = this.checked ? new Date().toLocaleTimeString() : null; this.parentElement.querySelector('.time').innerText = time ? `Completed at ${time}` : ''; tasks[i] = { text: this.dataset.text, completed: this.checked, completionTime: time }; }); }); document.getElementById('submitBtn').onclick = async () => { const res = await fetch('/staff/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tasks }) }); alert(await res.text()); window.location.href = '/login'; };</script></div></body></html>
+
+views/noTasks.ejs
+html
+
+<!DOCTYPE html>
+<html><head><title>No Tasks Assigned</title><link rel="stylesheet" href="/style.css"></head>
+<body><div class="container"><p>Are you covering a shift for another employee?</p>
+<form id="coverForm"><select id="targetEmp"></select><button type="button" id="coverBtn">Yes, cover shift</button><button type="button" id="cancelBtn">No, see manager</button></form>
+<script>fetch('/admin/employees').then(r=>r.json()).then(emps=>{ let sel=document.getElementById('targetEmp'); emps.forEach(e=>{let opt=document.createElement('option'); opt.value=e.id; opt.text=e.name; sel.appendChild(opt);});}); document.getElementById('coverBtn').onclick=()=>{fetch('/staff/cover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetEmployeeId:document.getElementById('targetEmp').value})}).then(()=>window.location.reload());}; document.getElementById('cancelBtn').onclick=()=>alert('Please see a manager for assistance.');</script></div></body></html>
+
+Create admin login view (views/admin/login.ejs) similar to staff login but with action="/admin/login".
+
+Create admin dashboard, employees, shifts, schedule, reports similarly (simple tables/forms). For brevity, Replit AI will generate them following the same pattern – provide one example:
+
+views/admin/employees.ejs
+html
+
+<!DOCTYPE html>
+<html><head><title>Manage Employees</title><link rel="stylesheet" href="/style.css"></head>
+<body><div class="container"><h1>Employees</h1><table border="1"><tr><th>Name</th><th>Code</th><th>Shift</th><th>Action</th></tr>
+<% employees.forEach(emp => { %><tr><td><%= emp.name %></td><td><%= emp.code %></td><td><%= emp.shift_name %></td><td><form method="POST" action="/admin/employees/delete/<%= emp.id %>"><button type="submit">Delete</button></form></td></tr><% }); %></table>
+<h2>Add Employee</h2><form method="POST" action="/admin/employees/add"><input name="name" placeholder="Name" required><input name="code" placeholder="4-digit code" required><select name="shift_name"><% shifts.forEach(s => { %><option><%= s.shift_name %></option><% }); %></select><button type="submit">Add</button></form></div></body></html>
+
+Step 13: Public CSS (public/style.css)
+css
+
+body { font-family: Arial, sans-serif; background: #f0f2f5; margin:0; padding:20px; }
+.container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+button, input, select { margin: 5px; padding: 8px; }
+ul { list-style: none; padding: 0; }
+li { margin: 10px 0; padding: 8px; background: #f9f9f9; border-radius: 4px; }
+
+Step 14: package.json (scripts section)
+
+Add to package.json: "start": "node server.js"
+
+ENVIRONMENT VARIABLES
+=====================
+Create .env with these (replace with actual values):
+SESSION_SECRET=generate_a_long_random_string
+GOOGLE_SHEETS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----\n"
+GOOGLE_SHEETS_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+SPREADSHEET_ID=1ABCxyz_YourGoogleSheetID
+ADMIN_CODE=9999
+
+RUN & DEPLOYMENT INSTRUCTIONS
+==============================
+
+    Create a Google Service Account, enable Google Sheets API, share your target spreadsheet (edit permission) with the client_email.
+
+    Run npm install to install all dependencies.
+
+    Create the SQLite database: node db/init.js (or simply start server – it initializes on first run).
+
+    Start the dev server: npm start
+
+    Access the app at http://localhost:3000/login
+
+    For Replit deployment: Ensure all env vars are set in Secrets tab. Use npm start as run command.
+
+ADDITIONAL NOTES
+================
+
+    Shifts are predefined as "Open (9:30am - 5:00PM)", "Mid (12:00pm - 7:30pm)", "Close (5:00pm - 12:30am)" – store only the short names in DB: "Open", "Mid", "Close".
+
+    Admin can add any custom tasks to any employee for any date within next 14 days via /admin/schedule.
+
+    Covering shift logic: when employee has no tasks for today, they pick a target employee from list, then system loads that employee's shift tasks + their scheduled tasks.
+
+    All submissions go to Google Sheets; admin reports fetch last 30 days from Sheets.
+
+    No automatic deletion – manually remove old rows from Sheets if needed.
+
+    The app includes simple CSS; can be extended.

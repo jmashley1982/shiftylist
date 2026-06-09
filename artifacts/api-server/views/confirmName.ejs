@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm Identity</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page-center">
+    <div class="card">
+      <div class="logo">ShiftList</div>
+      <p class="subtitle">Please confirm your identity</p>
+      <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 6px;">Is this you?</p>
+      <div class="name-confirm"><%= employee.name %></div>
+      <p style="color: var(--muted); font-size: 0.85rem; margin-bottom: 20px;">Shift: <strong><%= employee.shift_name %></strong></p>
+      <div class="btn-row">
+        <form method="POST" action="/confirm-name" style="flex:1">
+          <input type="hidden" name="confirm" value="yes">
+          <button type="submit" class="btn btn-primary btn-full">Yes, that's me</button>
+        </form>
+        <form method="POST" action="/confirm-name" style="flex:1">
+          <input type="hidden" name="confirm" value="no">
+          <button type="submit" class="btn btn-ghost btn-full">Not me</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
