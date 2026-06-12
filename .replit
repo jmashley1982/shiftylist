@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "postgresql-16"]
 run = "pnpm --filter @workspace/shiftlist run dev"
 
 [deployment]
@@ -31,3 +31,6 @@ externalPort = 8081
 [[ports]]
 localPort = 19105
 externalPort = 3001
+
+[nix]
+channel = "stable-25_05"

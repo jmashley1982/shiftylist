@@ -12,7 +12,7 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
 - Server: Express 5 + EJS templates
-- DB: SQLite (better-sqlite3) — stored at `artifacts/api-server/shiftdb.sqlite`
+- DB: PostgreSQL (Replit built-in) — schema managed via Drizzle ORM
 - Auth: express-session with 4-digit staff codes + admin code
 - Google Sheets: googleapis (service account)
 - Date: date-fns
@@ -20,21 +20,21 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 
 ## Where things live
 
-- Server entry: `artifacts/api-server/src/index.ts`
-- App setup (session, EJS, middleware): `artifacts/api-server/src/app.ts`
-- Routes: `artifacts/api-server/src/routes/` (auth, staff, admin, health)
-- Views (EJS): `artifacts/api-server/views/` and `views/admin/`
-- Static CSS: `artifacts/api-server/public/style.css`
-- DB setup + types: `artifacts/api-server/src/db/index.ts`
-- Google Sheets utils: `artifacts/api-server/src/utils/sheets.ts`
-- Date helpers: `artifacts/api-server/src/utils/dateHelpers.ts`
+- Server entry: `artifacts/shiftlist/src/index.ts`
+- App setup (session, EJS, middleware): `artifacts/shiftlist/src/app.ts`
+- Routes: `artifacts/shiftlist/src/routes/` (auth, staff, admin, health)
+- Views (EJS): `artifacts/shiftlist/views/` and `views/admin/`
+- Static CSS: `artifacts/shiftlist/public/style.css`
+- DB setup: `artifacts/shiftlist/src/db/index.ts` (wraps `@workspace/db` pool)
+- DB schema: `lib/db/src/schema/index.ts` (Drizzle ORM)
+- Google Sheets utils: `artifacts/shiftlist/src/utils/sheets.ts`
+- Date helpers: `artifacts/shiftlist/src/utils/dateHelpers.ts`
 
 ## Architecture decisions
 
 - EJS server-rendered templates (not React) — matches the spec and keeps the codebase simple for a staff-facing internal tool.
-- SQLite via better-sqlite3 — synchronous API, zero config, persistent at the artifact root.
+- PostgreSQL via Drizzle ORM — persistent across autoscale restarts, managed by Replit.
 - Google Sheets integration is lazy-imported and gracefully no-ops if credentials aren't set — the app works without Sheets, it just won't log submissions.
-- `better-sqlite3` is externalized from esbuild (native module) and listed in `onlyBuiltDependencies`.
 - Views and public files are referenced via `import.meta.url` so paths resolve correctly in both dev (src/) and prod (dist/) contexts.
 
 ## Product
@@ -42,7 +42,7 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 - **Staff login**: Enter 4-digit code → confirm name → see today's shift tasks
 - **Task checklist**: Tick off tasks with timestamp, covering shift support
 - **Report submission**: Tasks logged to Google Sheets with timestamps
-- **Admin panel**: Manage employees, shift templates (Open/Mid/Close), one-off scheduled tasks (next 14 days), view last 30 days of reports
+- **Admin panel**: Manage employees, shift templates (Open/Mid/Close), schedule employees on the shift calendar (28-day view), view last 30 days of reports
 
 ## User preferences
 
@@ -51,9 +51,10 @@ _Populate as you build — explicit user instructions worth remembering across s
 ## Gotchas
 
 - Run `pnpm install` after any change to `pnpm-workspace.yaml`.
-- `better-sqlite3` is a native module — it's in `onlyBuiltDependencies` in `pnpm-workspace.yaml`. Don't remove it.
 - Google Sheets submission silently skips if `SPREADSHEET_ID` / `GOOGLE_SHEETS_CLIENT_EMAIL` / `GOOGLE_SHEETS_PRIVATE_KEY` are not set. The app still works for task management without them.
 - Admin code defaults to `1234` if `ADMIN_CODE` env var is not set.
+- Database schema changes are managed via Drizzle. After schema changes, run `pnpm --filter @workspace/db run push` to update the dev DB.
+- The dev database is separate from production — when you publish, Replit will sync the schema to production.
 
 ## Environment secrets required
 

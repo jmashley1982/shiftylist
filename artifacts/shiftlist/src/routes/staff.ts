@@ -1,5 +1,5 @@
 import { Router } from "express";
-import db, { type Employee, type ShiftTemplate, type ScheduledTask } from "../db/index.js";
+import { pool } from "../db/index.js";
 import { ensureStaffAuth } from "../middleware/auth.js";
 import { getTodayStr } from "../utils/dateHelpers.js";
 import { appendToSheet } from "../utils/sheets.js";
@@ -7,62 +7,65 @@ import { logger } from "../lib/logger.js";
 
 const router = Router();
 
-router.get("/tasks", ensureStaffAuth, (req, res) => {
+router.get("/tasks", ensureStaffAuth, async (req, res) => {
   const empId = req.session.employeeId!;
   const today = getTodayStr();
 
-  const employee = db
-    .prepare("SELECT * FROM employees WHERE id = ?")
-    .get(empId) as Employee;
+  const empResult = await pool.query(
+    "SELECT * FROM employees WHERE id = $1",
+    [empId]
+  );
+  const employee = empResult.rows[0];
 
-  // Session override means covering someone else's shift; otherwise look up today's assignment
   let shiftName = req.session.employeeShift;
   if (!shiftName) {
-    const assignment = db
-      .prepare("SELECT shift_name FROM shift_assignments WHERE employee_id = ? AND date = ?")
-      .get(empId, today) as { shift_name: string } | undefined;
-    shiftName = assignment?.shift_name;
+    const assignResult = await pool.query(
+      "SELECT shift_name FROM shift_assignments WHERE employee_id = $1 AND date = $2",
+      [empId, today]
+    );
+    shiftName = assignResult.rows[0]?.shift_name;
   }
 
   if (!shiftName) {
-    // Not scheduled today — offer cover option
-    const todaysAssignments = db.prepare(`
+    const todaysResult = await pool.query(`
       SELECT sa.id, sa.employee_id, sa.shift_name, e.name as employee_name
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id
-      WHERE sa.date = ? AND sa.employee_id != ?
+      WHERE sa.date = $1 AND sa.employee_id != $2
       ORDER BY e.name
-    `).all(today, empId) as Array<{ id: number; employee_id: number; shift_name: string; employee_name: string }>;
+    `, [today, empId]);
     return void res.render("noTasks", {
       employeeName: req.session.employeeName,
-      todaysAssignments,
+      todaysAssignments: todaysResult.rows,
     });
   }
 
-  const shiftTasks = db
-    .prepare("SELECT task_text FROM shift_templates WHERE shift_name = ? ORDER BY display_order")
-    .all(shiftName) as Pick<ShiftTemplate, "task_text">[];
+  const tasksResult = await pool.query(
+    "SELECT task_text FROM shift_templates WHERE shift_name = $1 ORDER BY display_order",
+    [shiftName]
+  );
 
-  const scheduled = db
-    .prepare("SELECT task_text FROM scheduled_tasks WHERE employee_id = ? AND target_date = ?")
-    .all(empId, today) as Pick<ScheduledTask, "task_text">[];
+  const schedResult = await pool.query(
+    "SELECT task_text FROM scheduled_tasks WHERE employee_id = $1 AND target_date = $2",
+    [empId, today]
+  );
 
   const allTasks = [
-    ...shiftTasks.map(t => ({ text: t.task_text })),
-    ...scheduled.map(t => ({ text: t.task_text })),
+    ...tasksResult.rows.map((t: { task_text: string }) => ({ text: t.task_text })),
+    ...schedResult.rows.map((t: { task_text: string }) => ({ text: t.task_text })),
   ];
 
   if (allTasks.length === 0) {
-    const todaysAssignments = db.prepare(`
+    const todaysResult = await pool.query(`
       SELECT sa.id, sa.employee_id, sa.shift_name, e.name as employee_name
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id
-      WHERE sa.date = ? AND sa.employee_id != ?
+      WHERE sa.date = $1 AND sa.employee_id != $2
       ORDER BY e.name
-    `).all(today, empId) as Array<{ id: number; employee_id: number; shift_name: string; employee_name: string }>;
+    `, [today, empId]);
     return void res.render("noTasks", {
       employeeName: req.session.employeeName,
-      todaysAssignments,
+      todaysAssignments: todaysResult.rows,
     });
   }
 
@@ -114,12 +117,14 @@ router.post("/submit", ensureStaffAuth, async (req, res) => {
   }
 });
 
-router.post("/cover", ensureStaffAuth, (req, res) => {
+router.post("/cover", ensureStaffAuth, async (req, res) => {
   const { targetEmployeeId } = req.body as { targetEmployeeId: string };
   const today = getTodayStr();
-  const assignment = db
-    .prepare("SELECT shift_name FROM shift_assignments WHERE employee_id = ? AND date = ?")
-    .get(Number(targetEmployeeId), today) as { shift_name: string } | undefined;
+  const result = await pool.query(
+    "SELECT shift_name FROM shift_assignments WHERE employee_id = $1 AND date = $2",
+    [Number(targetEmployeeId), today]
+  );
+  const assignment = result.rows[0];
   if (!assignment) {
     return void res.status(400).send("That employee has no shift assigned today.");
   }

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import db, { type Employee } from "../db/index.js";
+import { pool } from "../db/index.js";
 
 const router = Router();
 
@@ -12,11 +12,13 @@ router.get("/login", (req, res) => {
   res.render("login", { error: null });
 });
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   const { code } = req.body as { code: string };
-  const employee = db
-    .prepare("SELECT * FROM employees WHERE code = ?")
-    .get(code) as Employee | undefined;
+  const result = await pool.query(
+    "SELECT * FROM employees WHERE code = $1",
+    [code]
+  );
+  const employee = result.rows[0];
   if (!employee) {
     return void res.render("login", { error: "Invalid code. Please try again." });
   }
