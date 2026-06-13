@@ -8,7 +8,10 @@
 </head>
 <body>
   <nav class="navbar">
-    <span class="brand">ShiftList</span>
+    <a href="/admin/dashboard" class="brand">
+      <img src="/vvas-logo.png" alt="VVAS">
+      <span>ShiftList</span>
+    </a>
     <div class="navbar-right">
       <span class="navbar-user"><%= employeeName %></span>
       <a href="/logout" class="btn btn-ghost btn-sm" style="min-height:36px;padding:7px 12px;">Out</a>
@@ -54,7 +57,7 @@
 
   <!-- Incomplete task warning modal -->
   <div id="incompleteModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center;">
-    <div style="background:var(--card-bg); border-radius:12px; padding:24px; max-width:340px; width:90%; box-shadow:var(--shadow-lg); text-align:center;">
+    <div style="background:var(--card); border-radius:12px; padding:24px; max-width:340px; width:90%; box-shadow:var(--shadow-lg); text-align:center; border:1px solid var(--border);">
       <div style="font-size:2rem; margin-bottom:8px;">⚠️</div>
       <h2 style="font-size:1.1rem; margin-bottom:8px;">Not all tasks completed</h2>
       <p style="font-size:0.85rem; color:var(--muted); margin-bottom:16px;">

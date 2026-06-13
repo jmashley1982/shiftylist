@@ -1,4 +1,4 @@
-# ShiftList — Staff Shift To-Do List
+# ShiftList — Viking Vapor & Smoke Staff Shift To-Do List
 
 A server-rendered internal web app for managing staff shift tasks. Staff log in with a 4-digit code, tick off tasks as they complete them (with time logging), and submit a final report to Google Sheets. Admins manage employees, shift templates, one-off scheduled tasks, and view reports.
 
@@ -46,8 +46,9 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 - **Admin panel**: Manage employees, reusable task templates, shift templates (Open/Mid/Close), schedule daily shifts (date picker, publish/unpublish, add/remove/reorder tasks), view reports
 
 ## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Dark theme with teal (#38b6a0) accents matching the Viking Vapor & Smoke logo
+- High contrast for readability in store lighting
+- Logo displayed on all login and staff-facing pages
 
 ## Gotchas
 
