@@ -53,14 +53,14 @@
         <div class="panel">
           <div class="panel-header">
             <h2><span class="shift-badge"><%= selectedShift.name %></span></h2>
-            <span style="color:var(--muted); font-size:0.82rem;"><%= standingTasks.length %> tasks</span>
+            <span style="color:var(--muted); font-size:0.82rem;" data-task-count><%= standingTasks.length %> task<%= standingTasks.length === 1 ? '' : 's' %></span>
           </div>
 
           <div class="alert alert-success" style="margin-bottom:14px;">
             Always live — staff on the <%= selectedShift.name %> shift see this list today.
           </div>
 
-          <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/add"
+          <form id="standingAddForm" method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/add"
                 style="display:flex; gap:8px; margin-bottom:14px;">
             <input type="text" name="name" list="taskSuggestions" placeholder="Type a task and press Enter…"
                    required autofocus autocomplete="off" style="flex:1;">
@@ -84,7 +84,7 @@
               <% }); %>
             </div>
           <% } else { %>
-            <p style="color:var(--muted); font-size:0.88rem;">No tasks yet. Type one above to start building this shift.</p>
+            <p class="standing-empty" style="color:var(--muted); font-size:0.88rem;">No tasks yet. Type one above to start building this shift.</p>
           <% } %>
         </div>
 
@@ -363,6 +363,168 @@
           }, { passive: true });
         });
       }
+
+      // ── Standing-list add form (fetch + DOM insertion) ───────────────────────
+      (function () {
+        var addForm = document.getElementById('standingAddForm');
+        if (!addForm) return;
+
+        var shiftId = '<%= selectedShift ? selectedShift.id : "" %>';
+        var reorderUrl = '/admin/shifts/' + shiftId + '/standing/reorder';
+
+        addForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var input = addForm.querySelector('input[name="name"]');
+          var name = input.value.trim();
+          if (!name) return;
+
+          var btn = addForm.querySelector('button[type="submit"]');
+          btn.disabled = true;
+
+          fetch(addForm.action, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json',
+            },
+            body: 'name=' + encodeURIComponent(name),
+          })
+          .then(function (r) {
+            if (!r.ok) throw new Error('bad response');
+            return r.json();
+          })
+          .then(function (data) {
+            input.value = '';
+            input.focus();
+            btn.disabled = false;
+
+            var panel = addForm.closest('.panel');
+
+            // If task already existed in shift, just flash the existing row
+            if (!data.created) {
+              var existingRow = panel ? panel.querySelector('.task-row[data-id="' + data.id + '"]') : null;
+              if (existingRow) { flashRow(existingRow); }
+              showToast('Task already in list');
+              return;
+            }
+
+            // Ensure the task-edit-list container exists
+            var list = panel ? panel.querySelector('.task-edit-list') : null;
+            var emptyMsg = panel ? panel.querySelector('.standing-empty') : null;
+
+            if (!list) {
+              // First task — remove empty message and create list
+              if (emptyMsg) emptyMsg.remove();
+              list = document.createElement('div');
+              list.className = 'task-edit-list';
+              list.dataset.reorderUrl = reorderUrl;
+              panel.appendChild(list);
+              initDragList(list);
+            }
+
+            var idx = list.querySelectorAll('.task-row').length + 1;
+
+            // Build the new row
+            var row = document.createElement('div');
+            row.className = 'task-row';
+            row.draggable = true;
+            row.dataset.id = String(data.id);
+
+            var handle = document.createElement('span');
+            handle.className = 'drag-handle';
+            handle.title = 'Drag to reorder';
+            handle.textContent = '⠿';
+
+            var num = document.createElement('span');
+            num.className = 'task-num';
+            num.textContent = idx + '.';
+
+            var nameSpan = document.createElement('span');
+            nameSpan.className = 'task-edit-name';
+            nameSpan.contentEditable = 'true';
+            nameSpan.spellcheck = false;
+            nameSpan.dataset.renameUrl = '/admin/shifts/' + shiftId + '/standing/rename/' + data.id;
+            nameSpan.textContent = data.name;
+
+            var removeForm = document.createElement('form');
+            removeForm.method = 'POST';
+            removeForm.action = '/admin/shifts/' + shiftId + '/standing/remove/' + data.id;
+            removeForm.style.flexShrink = '0';
+            removeForm.addEventListener('submit', function (ev) {
+              if (!confirm('Remove this task?')) ev.preventDefault();
+            });
+
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'submit';
+            removeBtn.className = 'btn btn-danger btn-sm';
+            removeBtn.textContent = '✕';
+            removeForm.appendChild(removeBtn);
+
+            row.appendChild(handle);
+            row.appendChild(num);
+            row.appendChild(nameSpan);
+            row.appendChild(removeForm);
+
+            list.appendChild(row);
+            initEditable(nameSpan);
+
+            // Wire up touch drag for the new handle by re-attaching touch listeners
+            // (initTouchDrag only runs over handles that existed at init time)
+            (function () {
+              var dragEl = null;
+              var touchHandle = row.querySelector('.drag-handle');
+              if (!touchHandle) return;
+              function onMove(e) {
+                if (!dragEl) return;
+                e.preventDefault();
+                var touch = e.touches[0];
+                dragEl.style.visibility = 'hidden';
+                var below = document.elementFromPoint(touch.clientX, touch.clientY);
+                dragEl.style.visibility = '';
+                if (!below) return;
+                var target = below.closest ? below.closest('.task-row') : null;
+                if (!target || target === dragEl || !list.contains(target)) return;
+                var rect = target.getBoundingClientRect();
+                var before = touch.clientY < rect.top + rect.height / 2;
+                list.insertBefore(dragEl, before ? target : target.nextSibling);
+                refreshNums(list);
+              }
+              function onEnd() {
+                if (!dragEl) return;
+                dragEl.classList.remove('is-dragging');
+                document.removeEventListener('touchmove', onMove);
+                document.removeEventListener('touchend', onEnd);
+                document.removeEventListener('touchcancel', onEnd);
+                var url = list.dataset.reorderUrl;
+                if (url) saveOrder(list, url);
+                dragEl = null;
+              }
+              touchHandle.addEventListener('touchstart', function () {
+                dragEl = row;
+                dragEl.classList.add('is-dragging');
+                document.addEventListener('touchmove', onMove, { passive: false });
+                document.addEventListener('touchend', onEnd, { passive: true });
+                document.addEventListener('touchcancel', onEnd, { passive: true });
+              }, { passive: true });
+            })();
+
+            // Flash the new row
+            flashRow(row);
+            showToast('Task added');
+
+            // Update task count in panel header
+            var countEl = panel ? panel.querySelector('.panel-header [data-task-count]') : null;
+            if (countEl) {
+              var newCount = list.querySelectorAll('.task-row').length;
+              countEl.textContent = newCount + ' task' + (newCount === 1 ? '' : 's');
+            }
+          })
+          .catch(function () {
+            btn.disabled = false;
+            showToast('Failed to add task — try again', true);
+          });
+        });
+      })();
 
       // ── Init ──────────────────────────────────────────────────────────────────
       document.querySelectorAll('.task-edit-list').forEach(function (list) {

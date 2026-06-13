@@ -191,6 +191,11 @@ router.post("/shifts/delete/:id", async (req, res) => {
 router.post("/shifts/:shiftId/standing/add", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
   const name = (req.body.name as string)?.trim();
+  const wantsJson = req.headers.accept?.includes("application/json") ?? false;
+
+  let shiftTaskId: number | null = null;
+  let created = false;
+
   if (name) {
     await withTransaction(async (client) => {
       await client.query("SELECT id FROM shifts WHERE id = $1 FOR UPDATE", [shiftId]);
@@ -200,13 +205,36 @@ router.post("/shifts/:shiftId/standing/add", async (req, res) => {
         "SELECT COALESCE(MAX(display_order), -1) as max FROM shift_tasks WHERE shift_id = $1",
         [shiftId]
       )).rows[0];
-      await client.query(
+      const inserted = await client.query(
         `INSERT INTO shift_tasks (shift_id, task_id, display_order) VALUES ($1, $2, $3)
-         ON CONFLICT (shift_id, task_id) DO NOTHING`,
+         ON CONFLICT (shift_id, task_id) DO NOTHING
+         RETURNING id`,
         [shiftId, taskId, (maxRow.max as number) + 1]
       );
+      if (inserted.rows[0]) {
+        shiftTaskId = inserted.rows[0].id;
+        created = true;
+      } else {
+        // Task already exists in this shift — look up the existing shift_task id
+        const existing = await client.query(
+          "SELECT id FROM shift_tasks WHERE shift_id = $1 AND task_id = $2",
+          [shiftId, taskId]
+        );
+        shiftTaskId = existing.rows[0]?.id ?? null;
+        created = false;
+      }
     });
   }
+
+  if (wantsJson) {
+    if (shiftTaskId !== null && name) {
+      res.json({ id: shiftTaskId, name, created });
+    } else {
+      res.status(400).json({ error: "Invalid task name" });
+    }
+    return;
+  }
+
   res.redirect(hubUrl(shiftId));
 });
 
