@@ -1,10 +1,10 @@
 # ShiftList — Viking Vapor & Smoke Staff Shift To-Do List
 
-A server-rendered internal web app for managing staff shift tasks. Staff log in with a 4-digit code, tick off tasks as they complete them (with time logging), and submit a final report to Google Sheets. Admins manage employees, shift templates, one-off scheduled tasks, and view reports.
+A server-rendered internal web app for managing staff shift tasks. Staff log in with a 4-digit code, tick off tasks as they complete them (with time logging), and submit a final report stored in the database. Admins manage employees, shift templates, one-off scheduled tasks, and view reports.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — build + run the server (port 8080)
+- `pnpm --filter @workspace/shiftlist run dev` — build + run the server
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 
@@ -14,7 +14,6 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 - Server: Express 5 + EJS templates
 - DB: PostgreSQL (Replit built-in) — schema managed via Drizzle ORM
 - Auth: express-session with 4-digit staff codes + admin code
-- Google Sheets: googleapis (service account)
 - Date: date-fns
 - Build: esbuild (ESM bundle)
 
@@ -27,14 +26,13 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 - Static CSS: `artifacts/shiftlist/public/style.css`
 - DB setup: `artifacts/shiftlist/src/db/index.ts` (wraps `@workspace/db` pool)
 - DB schema: `lib/db/src/schema/index.ts` (Drizzle ORM)
-- Google Sheets utils: `artifacts/shiftlist/src/utils/sheets.ts`
 - Date helpers: `artifacts/shiftlist/src/utils/dateHelpers.ts`
 
 ## Architecture decisions
 
 - EJS server-rendered templates (not React) — matches the spec and keeps the codebase simple for a staff-facing internal tool.
 - PostgreSQL via Drizzle ORM — persistent across autoscale restarts, managed by Replit.
-- Google Sheets integration is lazy-imported and gracefully no-ops if credentials aren't set — the app works without Sheets, it just won't log submissions.
+- Shift submissions are stored in the `submissions` table; rows older than 30 days are deleted automatically on each admin report page load.
 - Views and public files are referenced via `import.meta.url` so paths resolve correctly in both dev (src/) and prod (dist/) contexts.
 
 ## Product
@@ -42,16 +40,15 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 - **Staff login**: Enter 4-digit code → confirm name → select shift (Open/Mid/Close) → see today's tasks
 - **Task checklist**: Tick off tasks with timestamps, add notes
 - **Incomplete task validation**: If not all tasks checked → modal asks to confirm and add a note
-- **Report submission**: Tasks + notes logged to Google Sheets with timestamps
+- **Report submission**: Tasks + notes saved to the database with timestamps; visible in the admin reports page
 - **Admin panel**: Manage employees, view reports, and a single **Shifts** hub to build each shift's checklist:
-  - **Standing list (always live)**: Each shift (Open/Mid/Close) has one checklist. Type a task and press Add — it's created (or reused) and instantly what staff see today. No publish step. Reorder/remove inline.
-  - **Specific day (optional override)**: Pick a date to customize just that day. It starts as a copy of the standing list; edits apply only to that date and override the standing list for staff on that day. "Revert to standing list" removes the override.
+  - **Standing list (always live)**: Each shift (Open/Mid/Close) has one checklist. Type a task and press Add — it's created (or reused) and instantly what staff see today. No publish step. Reorder/rename inline.
+  - **Specific day (extra tasks)**: Pick a date to add extra tasks that appear only on that day, appended below the standing list.
 
 ## Admin workflow model
 
-- The old separate Tasks / Shifts / Schedule screens are unified into one `/admin/shifts` hub. `?shift=<id>` selects which shift; `?date=<yyyy-mm-dd>` switches to per-day override mode.
-- Staff (`/staff/tasks`) read the day override for today if one exists, otherwise the shift's standing list. There is no required daily publish.
-- A day override is materialized in `daily_shifts` + `daily_shift_tasks` only when admin clicks "Customize this day" (or adds a task in day mode). Reverting deletes the `daily_shifts` row (cascade removes its tasks).
+- The `/admin/shifts` hub uses `?shift=<id>` to select a shift and `?date=<yyyy-mm-dd>` to switch to per-day extra tasks mode.
+- Staff (`/staff/tasks`) always see the standing checklist plus any extra tasks added for today.
 - Tasks are created-or-reused by name via `INSERT … ON CONFLICT (name) DO UPDATE … RETURNING id`; the `tasks` table backs autocomplete suggestions.
 
 ## User preferences
@@ -62,11 +59,10 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 ## Gotchas
 
 - Run `pnpm install` after any change to `pnpm-workspace.yaml`.
-- Google Sheets submission silently skips if `SPREADSHEET_ID` / `GOOGLE_SHEETS_CLIENT_EMAIL` / `GOOGLE_SHEETS_PRIVATE_KEY` are not set. The app still works for task management without them.
 - Admin code defaults to `1234` if `ADMIN_CODE` env var is not set.
-- Database schema changes are managed via Drizzle. After schema changes, run `pnpm --filter @workspace/db run push` to update the dev DB.
+- Database schema changes are managed via Drizzle. After schema changes, run `pnpm --filter @workspace/db run push-force` to update the dev DB (use `push-force` — plain `push` may prompt interactively about constraint renames).
 - The dev database is separate from production — when you publish, Replit will sync the schema to production.
-- Two unique indexes (`shift_tasks_shift_id_display_order_idx` and `daily_shift_tasks_daily_shift_id_display_order_idx`) were applied directly via SQL (not through Drizzle). If you re-provision the production DB, re-apply them: `CREATE UNIQUE INDEX IF NOT EXISTS shift_tasks_shift_id_display_order_idx ON shift_tasks (shift_id, display_order); CREATE UNIQUE INDEX IF NOT EXISTS daily_shift_tasks_daily_shift_id_display_order_idx ON daily_shift_tasks (daily_shift_id, display_order);`
+- One unique index (`shift_tasks_shift_id_display_order_idx`) was applied directly via SQL (not through Drizzle). If you re-provision the production DB, re-apply it: `CREATE UNIQUE INDEX IF NOT EXISTS shift_tasks_shift_id_display_order_idx ON shift_tasks (shift_id, display_order);`
 
 ## Environment secrets required
 
@@ -74,9 +70,6 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 |---|---|
 | `SESSION_SECRET` | ✅ Already set — session security |
 | `ADMIN_CODE` | Admin panel login (defaults to `1234` if unset) |
-| `GOOGLE_SHEETS_CLIENT_EMAIL` | Google Sheets report logging |
-| `GOOGLE_SHEETS_PRIVATE_KEY` | Google Sheets report logging |
-| `SPREADSHEET_ID` | Google Sheets report logging |
 
 ## Pointers
 

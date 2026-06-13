@@ -63,3 +63,18 @@ export type InsertShiftTask = typeof shiftTasks.$inferInsert;
 
 export type ExtraDayTask = typeof extraDayTasks.$inferSelect;
 export type InsertExtraDayTask = typeof extraDayTasks.$inferInsert;
+
+// Shift submission reports (replaces Google Sheets; deleted after 30 days)
+export const submissions = pgTable("submissions", {
+  id: serial("id").primaryKey(),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+  employeeCode: text("employee_code").notNull(),
+  employeeName: text("employee_name").notNull(),
+  shiftName: text("shift_name").notNull(),
+  date: text("date").notNull(),
+  taskSummary: text("task_summary").notNull(),
+  notes: text("notes").notNull().default(""),
+});
+
+export type Submission = typeof submissions.$inferSelect;
+export type InsertSubmission = typeof submissions.$inferInsert;

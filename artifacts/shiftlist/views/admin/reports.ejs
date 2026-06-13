@@ -14,44 +14,32 @@
       <p>Submissions from the last 30 days</p>
     </div>
 
-    <% if (!process.env.SPREADSHEET_ID) { %>
-      <div class="alert alert-error">
-        Google Sheets not connected. Set <strong>SPREADSHEET_ID</strong>, <strong>GOOGLE_SHEETS_CLIENT_EMAIL</strong>, and <strong>GOOGLE_SHEETS_PRIVATE_KEY</strong> in Secrets.
-      </div>
-    <% } %>
-
     <% if (submissions.length > 0) { %>
       <% submissions.forEach(function(row) { %>
         <div class="panel" style="padding:14px 16px;">
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-            <span style="font-weight:700; font-size:0.97rem;"><%= row[2] || '—' %></span>
-            <span class="shift-badge"><%= row[3] || '—' %></span>
+            <span style="font-weight:700; font-size:0.97rem;"><%= row.employee_name || '—' %></span>
+            <span class="shift-badge"><%= row.shift_name || '—' %></span>
           </div>
           <div style="font-size:0.8rem; color:var(--muted); margin-bottom:6px;">
-            <%= row[4] || '—' %> &nbsp;·&nbsp;
-            <%= row[0] ? new Date(row[0]).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—' %>
+            <%= row.date || '—' %> &nbsp;·&nbsp;
+            <%= row.submitted_at ? new Date(row.submitted_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—' %>
             &nbsp;·&nbsp; Code:
-            <code style="background:var(--bg); padding:1px 6px; border-radius:4px;"><%= row[1] || '—' %></code>
+            <code style="background:var(--bg); padding:1px 6px; border-radius:4px;"><%= row.employee_code || '—' %></code>
           </div>
-          <% if (row[5]) { %>
-            <p style="font-size:0.82rem; color:var(--muted); line-height:1.5; margin-bottom:6px;"><%= row[5] %></p>
+          <% if (row.task_summary) { %>
+            <p style="font-size:0.82rem; color:var(--muted); line-height:1.5; margin-bottom:6px;"><%= row.task_summary %></p>
           <% } %>
-          <% if (row[6]) { %>
+          <% if (row.notes) { %>
             <div style="font-size:0.8rem; background:var(--bg); padding:8px 10px; border-radius:6px; margin-top:4px;">
               <span style="font-weight:600; color:var(--text-mid);">Notes:</span>
-              <span style="color:var(--muted);"><%= row[6] %></span>
+              <span style="color:var(--muted);"><%= row.notes %></span>
             </div>
           <% } %>
         </div>
       <% }); %>
     <% } else { %>
-      <div class="alert alert-info">
-        <% if (process.env.SPREADSHEET_ID) { %>
-          No submissions found in the last 30 days.
-        <% } else { %>
-          Configure Google Sheets to see reports here.
-        <% } %>
-      </div>
+      <div class="alert alert-info">No submissions found in the last 30 days.</div>
     <% } %>
   </div>
 </body>

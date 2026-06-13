@@ -3,7 +3,6 @@ import type { PoolClient } from "pg";
 import { pool } from "../db/index.js";
 import { ensureAdminAuth } from "../middleware/auth.js";
 import { getTodayStr, formatDateDisplay } from "../utils/dateHelpers.js";
-import { getSubmissionsLast30Days } from "../utils/sheets.js";
 
 const router = Router();
 router.use(ensureAdminAuth);
@@ -313,7 +312,10 @@ router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {
 
 // ════════════════════════════════════ Reports ═════════════════════════════════
 router.get("/reports", async (_req, res) => {
-  const submissions = await getSubmissionsLast30Days();
+  await pool.query("DELETE FROM submissions WHERE submitted_at < NOW() - INTERVAL '30 days'");
+  const submissions = (await pool.query(
+    "SELECT * FROM submissions WHERE submitted_at >= NOW() - INTERVAL '30 days' ORDER BY submitted_at DESC"
+  )).rows;
   res.render("admin/reports", { submissions });
 });
 

@@ -2,7 +2,6 @@ import { Router } from "express";
 import { pool } from "../db/index.js";
 import { ensureStaffAuth } from "../middleware/auth.js";
 import { getTodayStr } from "../utils/dateHelpers.js";
-import { appendToSheet } from "../utils/sheets.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -84,12 +83,18 @@ router.post("/submit", ensureStaffAuth, async (req, res) => {
     notes,
   };
 
-  let sheetsError = false;
+  const taskSummary = tasks
+    .map((t) => `${t.completed ? "✓" : "✗"} ${t.text}${t.completionTime ? ` (${t.completionTime})` : ""}`)
+    .join(" | ");
+
   try {
-    await appendToSheet(submission);
+    await pool.query(
+      `INSERT INTO submissions (employee_code, employee_name, shift_name, date, task_summary, notes)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [submission.userCode, submission.employeeName, submission.shift, submission.date, taskSummary, notes]
+    );
   } catch (err) {
-    logger.error({ err }, "Google Sheets submission failed — continuing with local confirmation");
-    sheetsError = true;
+    logger.error({ err }, "Failed to save submission to DB — continuing with confirmation");
   }
 
   req.session.selectedShiftId = undefined;
@@ -99,7 +104,7 @@ router.post("/submit", ensureStaffAuth, async (req, res) => {
     date: submission.date,
     tasks,
     notes,
-    sheetsError,
+    sheetsError: false,
   });
 });
 
