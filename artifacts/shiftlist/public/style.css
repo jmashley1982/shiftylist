@@ -699,3 +699,71 @@ tbody tr:hover { background: rgba(56,182,160,.04); }
   margin: 0 auto;
   z-index: 90;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ADMIN SHIFT BUILDER — drag-and-drop task rows
+   ══════════════════════════════════════════════════════════════════════════ */
+.task-edit-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  transition: opacity 0.12s;
+  position: relative;
+}
+
+.task-row:last-child { border-bottom: none; }
+
+.task-row.is-dragging { opacity: 0.35; }
+
+.task-row.drag-over-top    { box-shadow: 0 -2px 0 var(--brand); }
+.task-row.drag-over-bottom { box-shadow:  0 2px 0 var(--brand); }
+
+.drag-handle {
+  color: var(--muted-light);
+  font-size: 1.05rem;
+  padding: 4px 3px;
+  cursor: grab;
+  flex-shrink: 0;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  line-height: 1;
+}
+
+.drag-handle:active { cursor: grabbing; }
+
+.task-num {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  min-width: 22px;
+  flex-shrink: 0;
+}
+
+.task-edit-name {
+  flex: 1;
+  font-size: 0.9rem;
+  cursor: text;
+  outline: none;
+  border-radius: var(--radius-xs);
+  padding: 3px 5px;
+  min-width: 0;
+  line-height: 1.4;
+  word-break: break-word;
+  -webkit-user-modify: read-write-plaintext-only;
+}
+
+.task-edit-name:focus {
+  background: rgba(56,182,160,.09);
+  box-shadow: 0 0 0 2px rgba(56,182,160,.25);
+  cursor: text;
+}
+
+.task-edit-name:not(:focus):hover { background: rgba(255,255,255,.04); }

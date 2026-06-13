@@ -232,6 +232,33 @@ router.post("/shifts/:shiftId/standing/remove/:id", async (req, res) => {
   res.redirect(hubUrl(req.params.shiftId));
 });
 
+router.post("/shifts/:shiftId/standing/rename/:id", async (req, res) => {
+  const shiftTaskId = Number(req.params.id);
+  const shiftId = Number(req.params.shiftId);
+  const name = (req.body.name as string)?.trim();
+  if (!name) return void res.json({ ok: false, error: "Name required" });
+  await withTransaction(async (client) => {
+    const taskId = await upsertTaskByName(client, name);
+    await client.query(
+      "UPDATE shift_tasks SET task_id = $1 WHERE id = $2 AND shift_id = $3",
+      [taskId, shiftTaskId, shiftId]
+    );
+  });
+  res.json({ ok: true });
+});
+
+router.post("/shifts/:shiftId/standing/reorder", async (req, res) => {
+  const shiftId = Number(req.params.shiftId);
+  const ids = (req.body.ids as unknown[]);
+  if (!Array.isArray(ids) || ids.length === 0) return void res.json({ ok: false });
+  const idArray = ids.map(Number).filter(n => n > 0);
+  await withTransaction(async (client) => {
+    await client.query("SELECT id FROM shifts WHERE id = $1 FOR UPDATE", [shiftId]);
+    await bulkRenormalizeOrder(client, "shift_tasks", idArray);
+  });
+  res.json({ ok: true });
+});
+
 router.post("/shifts/:shiftId/standing/move/:id", async (req, res) => {
   const id = Number(req.params.id);
   const shiftId = Number(req.params.shiftId);
@@ -359,6 +386,32 @@ router.post("/shifts/:shiftId/day/:date/add", async (req, res) => {
 router.post("/shifts/:shiftId/day/:date/remove/:id", async (req, res) => {
   await pool.query("DELETE FROM daily_shift_tasks WHERE id = $1", [Number(req.params.id)]);
   res.redirect(hubUrl(req.params.shiftId, req.params.date));
+});
+
+router.post("/shifts/:shiftId/day/:date/rename/:id", async (req, res) => {
+  const dailyShiftTaskId = Number(req.params.id);
+  const name = (req.body.name as string)?.trim();
+  if (!name) return void res.json({ ok: false, error: "Name required" });
+  await withTransaction(async (client) => {
+    const taskId = await upsertTaskByName(client, name);
+    await client.query(
+      "UPDATE daily_shift_tasks SET task_id = $1 WHERE id = $2",
+      [taskId, dailyShiftTaskId]
+    );
+  });
+  res.json({ ok: true });
+});
+
+router.post("/shifts/:shiftId/day/:date/reorder", async (req, res) => {
+  const shiftId = Number(req.params.shiftId);
+  const ids = (req.body.ids as unknown[]);
+  if (!Array.isArray(ids) || ids.length === 0) return void res.json({ ok: false });
+  const idArray = ids.map(Number).filter(n => n > 0);
+  await withTransaction(async (client) => {
+    await client.query("SELECT id FROM shifts WHERE id = $1 FOR UPDATE", [shiftId]);
+    await bulkRenormalizeOrder(client, "daily_shift_tasks", idArray);
+  });
+  res.json({ ok: true });
 });
 
 router.post("/shifts/:shiftId/day/:date/move/:id", async (req, res) => {
