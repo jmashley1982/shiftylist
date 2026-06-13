@@ -312,11 +312,17 @@ router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {
 
 // ════════════════════════════════════ Reports ═════════════════════════════════
 router.get("/reports", async (_req, res) => {
-  await pool.query("DELETE FROM submissions WHERE submitted_at < NOW() - INTERVAL '30 days'");
-  const submissions = (await pool.query(
-    "SELECT * FROM submissions WHERE submitted_at >= NOW() - INTERVAL '30 days' ORDER BY submitted_at DESC"
-  )).rows;
-  res.render("admin/reports", { submissions });
+  try {
+    await pool.query("DELETE FROM submissions WHERE submitted_at < NOW() - INTERVAL '30 days'");
+    const submissions = (await pool.query(
+      "SELECT * FROM submissions WHERE submitted_at >= NOW() - INTERVAL '30 days' ORDER BY submitted_at DESC"
+    )).rows;
+    res.render("admin/reports", { submissions, dbError: false });
+  } catch (err) {
+    const { logger } = await import("../lib/logger.js");
+    logger.error({ err }, "Failed to load submissions from DB");
+    res.render("admin/reports", { submissions: [], dbError: true });
+  }
 });
 
 export default router;

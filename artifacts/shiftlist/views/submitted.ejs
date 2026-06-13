@@ -12,12 +12,7 @@
       <div class="success-icon">✅</div>
       <h1>Report Submitted!</h1>
       <p class="subtitle">Your shift has been logged.</p>
-      <% if (sheetsError) { %>
-        <div class="alert alert-warning" style="margin-bottom:16px; text-align:left;">
-          <strong>⚠ Google Sheets sync failed.</strong><br>
-          <span style="font-size:0.82rem;">Your report was recorded locally, but Google Sheets could not be updated. Please contact your manager.</span>
-        </div>
-      <% } %>
+
 
       <ul class="summary-list">
         <li style="font-size:0.8rem; color:var(--muted); margin-bottom:6px; font-weight:600;">

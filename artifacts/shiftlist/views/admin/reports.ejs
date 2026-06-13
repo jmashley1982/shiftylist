@@ -14,7 +14,9 @@
       <p>Submissions from the last 30 days</p>
     </div>
 
-    <% if (submissions.length > 0) { %>
+    <% if (dbError) { %>
+      <div class="alert alert-error">Could not load reports. Please try refreshing the page.</div>
+    <% } else if (submissions.length > 0) { %>
       <% submissions.forEach(function(row) { %>
         <div class="panel" style="padding:14px 16px;">
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
@@ -38,7 +40,7 @@
           <% } %>
         </div>
       <% }); %>
-    <% } else { %>
+    <% } else if (!dbError) { %>
       <div class="alert alert-info">No submissions found in the last 30 days.</div>
     <% } %>
   </div>

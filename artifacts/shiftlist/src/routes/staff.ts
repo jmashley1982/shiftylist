@@ -104,7 +104,6 @@ router.post("/submit", ensureStaffAuth, async (req, res) => {
     date: submission.date,
     tasks,
     notes,
-    sheetsError: false,
   });
 });
 
