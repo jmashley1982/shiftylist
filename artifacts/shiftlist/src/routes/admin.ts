@@ -316,14 +316,45 @@ router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {
 router.get("/reports", async (_req, res) => {
   try {
     await pool.query("DELETE FROM submissions WHERE submitted_at < NOW() - INTERVAL '30 days'");
-    const submissions = (await pool.query(
+    const rows = (await pool.query(
       "SELECT * FROM submissions WHERE submitted_at >= NOW() - INTERVAL '30 days' ORDER BY submitted_at DESC"
     )).rows;
-    res.render("admin/reports", { submissions, dbError: false });
+
+    const shiftOrder = (n: string) => {
+      const l = n.toLowerCase();
+      return l === "open" ? 0 : l === "mid" ? 1 : l === "close" ? 2 : 3;
+    };
+
+    const dateMap = new Map<string, Map<string, typeof rows>>();
+    for (const row of rows) {
+      const date = (row.date as string) || "unknown";
+      if (!dateMap.has(date)) dateMap.set(date, new Map());
+      const sm = dateMap.get(date)!;
+      const shift = (row.shift_name as string) || "—";
+      if (!sm.has(shift)) sm.set(shift, []);
+      sm.get(shift)!.push(row);
+    }
+
+    const groups = [...dateMap.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([date, sm]) => {
+        const d = new Date(date + "T12:00:00");
+        const label = d.toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "short",
+          day: "numeric",
+        });
+        const shifts = [...sm.entries()]
+          .sort(([a], [b]) => shiftOrder(a) - shiftOrder(b) || a.localeCompare(b))
+          .map(([shiftName, items]) => ({ shiftName, items }));
+        return { date, label, shifts };
+      });
+
+    res.render("admin/reports", { groups, dbError: false });
   } catch (err) {
     const { logger } = await import("../lib/logger.js");
     logger.error({ err }, "Failed to load submissions from DB");
-    res.render("admin/reports", { submissions: [], dbError: true });
+    res.render("admin/reports", { groups: [], dbError: true });
   }
 });
 
