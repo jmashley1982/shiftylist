@@ -242,30 +242,6 @@ router.post("/shifts/:shiftId/standing/reorder", async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/shifts/:shiftId/standing/move/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  const shiftId = Number(req.params.shiftId);
-  const direction = req.body.direction as "up" | "down";
-
-  await withTransaction(async (client) => {
-    const rows = (await client.query(
-      "SELECT id FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order FOR UPDATE",
-      [shiftId]
-    )).rows as { id: number }[];
-
-    const idx = rows.findIndex((r) => r.id === id);
-    if (idx === -1) return;
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= rows.length) return;
-
-    [rows[idx], rows[swapIdx]] = [rows[swapIdx], rows[idx]];
-
-    await bulkRenormalizeOrder(client, "shift_tasks", rows.map((r) => r.id));
-  });
-
-  res.redirect(hubUrl(shiftId));
-});
-
 // ── Extra tasks for a specific day ──────────────────────────────────────────
 router.post("/shifts/:shiftId/day/:date/add-extra", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
