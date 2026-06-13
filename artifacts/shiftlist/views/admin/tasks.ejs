@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Tasks</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'tasks' }) %>
+  <div class="main-content">
+    <div class="page-header" style="margin-top:12px;">
+      <h1>Task Templates</h1>
+      <p>Reusable tasks that can be assigned to any shift</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><h2>New Task</h2></div>
+      <form method="POST" action="/admin/tasks/add" class="form-stack">
+        <div class="form-group">
+          <label>Task Name</label>
+          <input type="text" name="name" placeholder="e.g. Count cash drawer" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Add Task</button>
+      </form>
+    </div>
+
+    <% if (tasks.length > 0) { %>
+      <div class="panel">
+        <div class="panel-header"><h2>All Tasks</h2></div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <% tasks.forEach(function(task) { %>
+            <div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border);">
+              <span style="flex:1; font-size:0.9rem;"><%= task.name %></span>
+              <form method="POST" action="/admin/tasks/edit/<%= task.id %>" style="display:flex; gap:4px;" class="edit-form" data-id="<%= task.id %>">
+                <input type="text" name="name" value="<%= task.name %>" style="font-size:0.85rem; padding:4px 8px; min-height:32px; display:none;" class="edit-input" data-id="<%= task.id %>">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="toggleEdit(<%= task.id %>)">Edit</button>
+                <button type="submit" class="btn btn-primary btn-sm" style="display:none;" data-id="<%= task.id %>">Save</button>
+              </form>
+              <form method="POST" action="/admin/tasks/delete/<%= task.id %>" onsubmit="return confirm('Delete this task? It will be removed from all shifts.')">
+                <button type="submit" class="btn btn-danger btn-sm">✕</button>
+              </form>
+            </div>
+          <% }); %>
+        </div>
+      </div>
+    <% } else { %>
+      <div class="alert alert-info">Create a task above to get started.</div>
+    <% } %>
+  </div>
+
+  <script>
+    function toggleEdit(id) {
+      const form = document.querySelector('form[data-id="' + id + '"]');
+      const input = form.querySelector('input.edit-input');
+      const saveBtn = form.querySelector('button[data-id="' + id + '"]');
+      const editBtn = form.querySelector('button[type="button"]');
+      input.style.display = input.style.display === 'none' ? 'block' : 'none';
+      saveBtn.style.display = saveBtn.style.display === 'none' ? 'inline-block' : 'none';
+      editBtn.style.display = editBtn.style.display === 'none' ? 'inline-block' : 'none';
+      if (input.style.display !== 'none') input.focus();
+    }
+  </script>
+</body>
+</html>

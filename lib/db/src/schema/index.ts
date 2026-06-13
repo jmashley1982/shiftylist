@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, date, unique } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, date, boolean, unique, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 export const employees = pgTable("employees", {
@@ -9,43 +9,73 @@ export const employees = pgTable("employees", {
 
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });
 
-export const shiftTemplates = pgTable("shift_templates", {
+// Reusable master task list
+export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
-  shiftName: text("shift_name").notNull(),
-  taskText: text("task_text").notNull(),
+  name: text("name").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true });
+
+// Shift types (Open, Mid, Close, …)
+export const shifts = pgTable("shifts", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+});
+
+export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true });
+
+// Tasks assigned to each shift template (reusable, ordered)
+export const shiftTasks = pgTable("shift_tasks", {
+  id: serial("id").primaryKey(),
+  shiftId: integer("shift_id").notNull().references(() => shifts.id, { onDelete: "cascade" }),
+  taskId: integer("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
   displayOrder: integer("display_order").default(0).notNull(),
-});
-
-export const insertShiftTemplateSchema = createInsertSchema(shiftTemplates).omit({ id: true });
-
-export const scheduledTasks = pgTable("scheduled_tasks", {
-  id: serial("id").primaryKey(),
-  employeeId: integer("employee_id").notNull(),
-  targetDate: text("target_date").notNull(),
-  taskText: text("task_text").notNull(),
-});
-
-export const insertScheduledTaskSchema = createInsertSchema(scheduledTasks).omit({ id: true });
-
-export const shiftAssignments = pgTable("shift_assignments", {
-  id: serial("id").primaryKey(),
-  employeeId: integer("employee_id").notNull(),
-  date: text("date").notNull(),
-  shiftName: text("shift_name").notNull(),
 }, (table) => [
-  unique().on(table.employeeId, table.date),
+  unique().on(table.shiftId, table.taskId),
 ]);
 
-export const insertShiftAssignmentSchema = createInsertSchema(shiftAssignments).omit({ id: true });
+export const insertShiftTaskSchema = createInsertSchema(shiftTasks).omit({ id: true });
+
+// A shift scheduled for a specific day (with publish toggle)
+export const dailyShifts = pgTable("daily_shifts", {
+  id: serial("id").primaryKey(),
+  date: text("date").notNull(),
+  shiftId: integer("shift_id").notNull().references(() => shifts.id, { onDelete: "cascade" }),
+  isPublished: boolean("is_published").default(false).notNull(),
+}, (table) => [
+  unique().on(table.date, table.shiftId),
+]);
+
+export const insertDailyShiftSchema = createInsertSchema(dailyShifts).omit({ id: true });
+
+// Individual tasks for a specific day/shift (ordered, can differ from shift template)
+export const dailyShiftTasks = pgTable("daily_shift_tasks", {
+  id: serial("id").primaryKey(),
+  dailyShiftId: integer("daily_shift_id").notNull().references(() => dailyShifts.id, { onDelete: "cascade" }),
+  taskId: integer("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  displayOrder: integer("display_order").default(0).notNull(),
+}, (table) => [
+  unique().on(table.dailyShiftId, table.taskId),
+]);
+
+export const insertDailyShiftTaskSchema = createInsertSchema(dailyShiftTasks).omit({ id: true });
 
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = typeof employees.$inferInsert;
 
-export type ShiftTemplate = typeof shiftTemplates.$inferSelect;
-export type InsertShiftTemplate = typeof shiftTemplates.$inferInsert;
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = typeof tasks.$inferInsert;
 
-export type ScheduledTask = typeof scheduledTasks.$inferSelect;
-export type InsertScheduledTask = typeof scheduledTasks.$inferInsert;
+export type Shift = typeof shifts.$inferSelect;
+export type InsertShift = typeof shifts.$inferInsert;
 
-export type ShiftAssignment = typeof shiftAssignments.$inferSelect;
-export type InsertShiftAssignment = typeof shiftAssignments.$inferInsert;
+export type ShiftTask = typeof shiftTasks.$inferSelect;
+export type InsertShiftTask = typeof shiftTasks.$inferInsert;
+
+export type DailyShift = typeof dailyShifts.$inferSelect;
+export type InsertDailyShift = typeof dailyShifts.$inferInsert;
+
+export type DailyShiftTask = typeof dailyShiftTasks.$inferSelect;
+export type InsertDailyShiftTask = typeof dailyShiftTasks.$inferInsert;

@@ -11,85 +11,112 @@
   <div class="main-content">
     <div class="page-header" style="margin-top:12px;">
       <h1>Schedule</h1>
-      <p>Assign employees to shifts by day</p>
+      <p>Publish daily shifts for staff to pick from</p>
     </div>
 
-    <div class="panel">
-      <div class="panel-header"><h2>Add Shift</h2></div>
-      <% if (employees.length === 0) { %>
-        <div class="alert alert-info" style="margin-bottom:0;">No employees yet. <a href="/admin/employees">Add staff first →</a></div>
-      <% } else if (shiftNames.length === 0) { %>
-        <div class="alert alert-info" style="margin-bottom:0;">No shift templates yet. <a href="/admin/shifts">Create shifts first →</a></div>
-      <% } else { %>
-        <form method="POST" action="/admin/schedule/add" class="form-stack">
-          <div class="form-group">
-            <label>Date</label>
-            <input type="date" name="date" min="<%= today %>" max="<%= maxDate %>" value="<%= today %>" required>
-          </div>
-          <div class="form-group">
-            <label>Employee</label>
-            <select name="employee_id" required>
-              <option value="">Select employee…</option>
-              <% employees.forEach(function(emp) { %>
-                <option value="<%= emp.id %>"><%= emp.name %></option>
-              <% }); %>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Shift</label>
-            <select name="shift_name" required>
-              <option value="">Select shift…</option>
-              <% shiftNames.forEach(function(s) { %>
-                <option value="<%= s %>"><%= s %></option>
-              <% }); %>
-            </select>
-          </div>
-          <button type="submit" class="btn btn-primary btn-full">Assign Shift</button>
-        </form>
-      <% } %>
-    </div>
-
-    <div class="panel" style="padding:0; overflow:hidden;">
-      <div style="padding:14px 18px; border-bottom:1px solid var(--border); background:var(--bg);">
-        <h2 style="color:var(--text); font-size:0.85rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Next 28 Days</h2>
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
+      <a href="/admin/schedule?date=<%= prevDate %>" class="btn btn-ghost btn-sm">←</a>
+      <div style="display:flex; align-items:center; gap:8px; flex:1;">
+        <input type="date" id="datePicker" value="<%= date %>" style="flex:1; font-size:0.95rem; padding:6px 10px;">
+        <button onclick="goToDate()" class="btn btn-primary btn-sm">Go</button>
       </div>
-      <% dayObjects.forEach(function(day, i) { %>
-        <div style="<%= day.isToday ? 'background:#fafbff;' : '' %> border-bottom:<%= i < dayObjects.length - 1 ? '1px solid var(--border)' : 'none' %>;">
-          <div style="display:flex; align-items:flex-start; gap:12px; padding:14px 18px;">
+      <a href="/admin/schedule?date=<%= nextDate %>" class="btn btn-ghost btn-sm">→</a>
+    </div>
 
-            <!-- Date label -->
-            <div style="min-width:80px; padding-top:2px;">
-              <div style="font-size:0.88rem; font-weight:800; color:<%= day.isToday ? 'var(--brand)' : 'var(--text)' %>;">
-                <%= day.label.split(',')[0] %>
-              </div>
-              <div style="font-size:0.8rem; color:var(--muted); font-weight:500;">
-                <%= day.label.split(',').slice(1).join(',').trim() %>
-              </div>
-              <% if (day.isToday) { %>
-                <div style="font-size:0.68rem; font-weight:800; color:var(--brand); text-transform:uppercase; letter-spacing:0.4px; margin-top:2px;">Today</div>
-              <% } %>
-            </div>
+    <% if (date === today) { %>
+      <div class="alert alert-info" style="margin-bottom:16px;">Today: <%= formatDateDisplay(date) %></div>
+    <% } else { %>
+      <div style="font-size:0.85rem; color:var(--muted); margin-bottom:16px; text-align:center;">
+        <%= formatDateDisplay(date) %>
+      </div>
+    <% } %>
 
-            <!-- Assignments -->
-            <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;">
-              <% if (day.assignments.length > 0) { %>
-                <% day.assignments.forEach(function(a) { %>
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="flex:1; font-size:0.88rem; font-weight:600; color:var(--text-mid); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><%= a.employee_name %></span>
-                    <span class="shift-badge" style="flex-shrink:0; font-size:0.72rem; padding:3px 9px;"><%= a.shift_name %></span>
-                    <form method="POST" action="/admin/schedule/delete/<%= a.id %>" style="flex-shrink:0;">
-                      <button type="submit" class="btn btn-danger btn-sm" style="min-height:30px; padding:5px 10px; font-size:0.78rem;" onclick="return confirm('Remove this shift?')">✕</button>
-                    </form>
-                  </div>
-                <% }); %>
-              <% } else { %>
-                <span style="font-size:0.82rem; color:var(--muted-light); font-style:italic; padding-top:2px;">No assignments</span>
+    <% shifts.forEach(function(shift) {
+      const ds = dailyShiftMap[shift.id];
+      const isPublished = ds?.is_published === true;
+      const myTasks = dailyTasksByShift[shift.id] || [];
+      const tplTasks = templateTasksByShift[shift.id] || [];
+    %>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <h2><span class="shift-badge" style="font-size:0.9rem;"><%= shift.name %></span></h2>
+            <% if (isPublished) { %>
+              <span style="font-size:0.75rem; background:var(--success); color:white; padding:2px 8px; border-radius:4px;">Published</span>
+            <% } else { %>
+              <span style="font-size:0.75rem; background:var(--muted); color:white; padding:2px 8px; border-radius:4px;">Draft</span>
+            <% } %>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <% if (!isPublished) { %>
+              <form method="POST" action="/admin/schedule/<%= date %>/<%= shift.id %>/publish" style="display:inline;">
+                <button type="submit" class="btn btn-success btn-sm">Publish</button>
+              </form>
+              <% if (myTasks.length === 0 && tplTasks.length > 0) { %>
+                <form method="POST" action="/admin/schedule/<%= date %>/<%= shift.id %>/copy-template" style="display:inline;">
+                  <button type="submit" class="btn btn-primary btn-sm">Copy from Template</button>
+                </form>
               <% } %>
-            </div>
+            <% } else { %>
+              <form method="POST" action="/admin/schedule/<%= date %>/<%= shift.id %>/unpublish" style="display:inline;">
+                <button type="submit" class="btn btn-ghost btn-sm">Unpublish</button>
+              </form>
+            <% } %>
           </div>
         </div>
-      <% }); %>
-    </div>
+
+        <% if (isPublished || myTasks.length > 0) { %>
+          <form method="POST" action="/admin/schedule/<%= date %>/<%= shift.id %>/add-task" style="display:flex; gap:8px; margin-bottom:12px;">
+            <select name="taskId" required style="flex:1;">
+              <option value="">Add task…</option>
+              <% tasks.forEach(function(t) { %>
+                <option value="<%= t.id %>"><%= t.name %></option>
+              <% }); %>
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">Add</button>
+          </form>
+
+          <% if (myTasks.length > 0) { %>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <% myTasks.forEach(function(task, idx) { %>
+                <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border);">
+                  <span style="color:var(--muted); font-size:0.78rem; font-weight:700; min-width:24px;">#<%= task.display_order %></span>
+                  <span style="flex:1; font-size:0.9rem;"><%= task.task_name %></span>
+                  <div style="display:flex; gap:4px;">
+                    <% if (idx > 0) { %>
+                      <form method="POST" action="/admin/schedule/<%= date %>/<%= ds.id %>/move-task/<%= task.id %>" style="display:inline;">
+                        <input type="hidden" name="direction" value="up">
+                        <button type="submit" class="btn btn-ghost btn-sm">↑</button>
+                      </form>
+                    <% } %>
+                    <% if (idx < myTasks.length - 1) { %>
+                      <form method="POST" action="/admin/schedule/<%= date %>/<%= ds.id %>/move-task/<%= task.id %>" style="display:inline;">
+                        <input type="hidden" name="direction" value="down">
+                        <button type="submit" class="btn btn-ghost btn-sm">↓</button>
+                      </form>
+                    <% } %>
+                    <form method="POST" action="/admin/schedule/<%= date %>/<%= shift.id %>/remove-task/<%= task.id %>" style="display:inline;" onsubmit="return confirm('Remove this task?')">
+                      <button type="submit" class="btn btn-danger btn-sm">✕</button>
+                    </form>
+                  </div>
+                </div>
+              <% }); %>
+            </div>
+          <% } else { %>
+            <p style="color:var(--muted); font-size:0.88rem;">No tasks yet. Add tasks or copy from template.</p>
+          <% } %>
+        <% } else { %>
+          <p style="color:var(--muted); font-size:0.88rem;">Shift not published yet. Click <strong>Publish</strong> or <strong>Copy from Template</strong> to make it available.</p>
+        <% } %>
+      </div>
+    <% }); %>
   </div>
+
+  <script>
+    function goToDate() {
+      const d = document.getElementById('datePicker').value;
+      if (d) window.location.href = '/admin/schedule?date=' + d;
+    }
+  </script>
 </body>
 </html>

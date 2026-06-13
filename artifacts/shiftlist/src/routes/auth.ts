@@ -39,10 +39,24 @@ router.post("/confirm-name", (req, res) => {
     req.session.employeeName = emp.name;
     req.session.employeeCode = emp.code;
     delete req.session.pendingEmployee;
-    return void res.redirect("/staff/tasks");
+    return void res.redirect("/select-shift");
   }
   delete req.session.pendingEmployee;
   res.redirect("/login");
+});
+
+router.get("/select-shift", async (req, res) => {
+  if (!req.session.employeeId) return void res.redirect("/login");
+  const shifts = (await pool.query("SELECT * FROM shifts ORDER BY name")).rows;
+  res.render("selectShift", { employeeName: req.session.employeeName, shifts });
+});
+
+router.post("/select-shift", async (req, res) => {
+  if (!req.session.employeeId) return void res.redirect("/login");
+  const { shiftId } = req.body as { shiftId: string };
+  if (!shiftId) return void res.redirect("/select-shift");
+  req.session.selectedShiftId = Number(shiftId);
+  res.redirect("/staff/tasks");
 });
 
 router.get("/logout", (req, res) => {

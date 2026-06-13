@@ -13,6 +13,7 @@ interface ShiftSubmission {
   shift: string;
   date: string;
   tasks: TaskEntry[];
+  notes: string;
 }
 
 function getAuth() {
@@ -50,10 +51,11 @@ export async function appendToSheet(submission: ShiftSubmission): Promise<void> 
       submission.shift,
       submission.date,
       taskSummary,
+      submission.notes || "",
     ]];
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: "Submissions!A:F",
+      range: "Submissions!A:G",
       valueInputOption: "USER_ENTERED",
       requestBody: { values },
     });
@@ -79,7 +81,7 @@ export async function getSubmissionsLast30Days(): Promise<string[][]> {
     const sheets = google.sheets({ version: "v4", auth });
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: "Submissions!A:F",
+      range: "Submissions!A:G",
     });
     const rows = (response.data.values ?? []) as string[][];
     const thirtyDaysAgo = new Date();

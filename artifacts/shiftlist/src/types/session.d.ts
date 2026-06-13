@@ -4,7 +4,7 @@ declare module "express-session" {
   interface SessionData {
     employeeId?: number;
     employeeName?: string;
-    employeeShift?: string;
+    selectedShiftId?: number;
     employeeCode?: string;
     isAdmin?: boolean;
     pendingEmployee?: {

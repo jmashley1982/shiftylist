@@ -19,9 +19,6 @@
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; margin-top:8px;">
       <div>
         <h1 style="font-size:1.2rem;">Today's Tasks</h1>
-        <% if (coveringFor) { %>
-          <p style="font-size:0.8rem; color:var(--warning); font-weight:600; margin-top:2px;">Covering: <%= coveringFor %></p>
-        <% } %>
       </div>
       <span class="shift-badge"><%= shift %></span>
     </div>
@@ -40,6 +37,11 @@
       <% }); %>
     </ul>
 
+    <div style="margin-bottom:16px;">
+      <label style="font-size:0.85rem; font-weight:600; color:var(--text-mid); margin-bottom:6px; display:block;">Notes</label>
+      <textarea id="notes" rows="3" style="width:100%; padding:10px 12px; font-size:0.88rem; border:1px solid var(--border); border-radius:8px; resize:vertical; background:var(--bg); color:var(--text);" placeholder="Anything to note about this shift?"></textarea>
+    </div>
+
     <div style="padding-bottom: 80px;">
       <button class="btn btn-success btn-full" id="submitBtn" onclick="submitShift()">
         Submit Shift Report
@@ -50,8 +52,28 @@
     </div>
   </div>
 
+  <!-- Incomplete task warning modal -->
+  <div id="incompleteModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center;">
+    <div style="background:var(--card-bg); border-radius:12px; padding:24px; max-width:340px; width:90%; box-shadow:var(--shadow-lg); text-align:center;">
+      <div style="font-size:2rem; margin-bottom:8px;">⚠️</div>
+      <h2 style="font-size:1.1rem; margin-bottom:8px;">Not all tasks completed</h2>
+      <p style="font-size:0.85rem; color:var(--muted); margin-bottom:16px;">
+        You have unchecked tasks. Is this correct?
+      </p>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button onclick="confirmSubmit()" class="btn btn-primary btn-full">Yes, submit anyway</button>
+        <button onclick="closeModal()" class="btn btn-ghost btn-full">Go back and check</button>
+      </div>
+      <div style="margin-top:12px;">
+        <label style="font-size:0.8rem; font-weight:600; color:var(--text-mid); margin-bottom:4px; display:block;">Please leave a note:</label>
+        <textarea id="modalNotes" rows="2" style="width:100%; padding:8px; font-size:0.85rem; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);" placeholder="Why weren't all tasks completed?"></textarea>
+      </div>
+    </div>
+  </div>
+
   <script>
     const taskData = <%- JSON.stringify(tasks.map(function(t){ return { text: t.text, completed: false, completionTime: null }; })) %>;
+    let pendingSubmission = false;
 
     function updateProgress() {
       const done = taskData.filter(function(t){ return t.completed; }).length;
@@ -75,15 +97,52 @@
       updateProgress();
     }
 
-    async function submitShift() {
+    function showModal() {
+      const modal = document.getElementById('incompleteModal');
+      modal.style.display = 'flex';
+      // Copy main notes to modal
+      const mainNotes = document.getElementById('notes').value;
+      if (mainNotes) document.getElementById('modalNotes').value = mainNotes;
+    }
+
+    function closeModal() {
+      document.getElementById('incompleteModal').style.display = 'none';
+      pendingSubmission = false;
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = false;
+      btn.textContent = 'Submit Shift Report';
+    }
+
+    function confirmSubmit() {
+      const modalNotes = document.getElementById('modalNotes').value;
+      if (modalNotes) document.getElementById('notes').value = modalNotes;
+      closeModal();
+      doSubmit();
+    }
+
+    function submitShift() {
       const btn = document.getElementById('submitBtn');
       btn.disabled = true;
       btn.textContent = 'Submitting…';
+
+      const done = taskData.filter(function(t){ return t.completed; }).length;
+      if (done < taskData.length) {
+        pendingSubmission = true;
+        showModal();
+        return;
+      }
+
+      doSubmit();
+    }
+
+    async function doSubmit() {
+      const btn = document.getElementById('submitBtn');
+      const notes = document.getElementById('notes').value;
       try {
         const res = await fetch('/staff/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'tasks=' + encodeURIComponent(JSON.stringify(taskData))
+          body: 'tasks=' + encodeURIComponent(JSON.stringify(taskData)) + '&notes=' + encodeURIComponent(notes)
         });
         if (res.ok) {
           document.open(); document.write(await res.text()); document.close();

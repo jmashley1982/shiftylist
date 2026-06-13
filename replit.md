@@ -39,10 +39,11 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 
 ## Product
 
-- **Staff login**: Enter 4-digit code → confirm name → see today's shift tasks
-- **Task checklist**: Tick off tasks with timestamp, covering shift support
-- **Report submission**: Tasks logged to Google Sheets with timestamps
-- **Admin panel**: Manage employees, shift templates (Open/Mid/Close), schedule employees on the shift calendar (28-day view), view last 30 days of reports
+- **Staff login**: Enter 4-digit code → confirm name → select shift (Open/Mid/Close) → see today's tasks
+- **Task checklist**: Tick off tasks with timestamps, add notes
+- **Incomplete task validation**: If not all tasks checked → modal asks to confirm and add a note
+- **Report submission**: Tasks + notes logged to Google Sheets with timestamps
+- **Admin panel**: Manage employees, reusable task templates, shift templates (Open/Mid/Close), schedule daily shifts (date picker, publish/unpublish, add/remove/reorder tasks), view reports
 
 ## User preferences
 

@@ -34,7 +34,13 @@
             <code style="background:var(--bg); padding:1px 6px; border-radius:4px;"><%= row[1] || '—' %></code>
           </div>
           <% if (row[5]) { %>
-            <p style="font-size:0.82rem; color:var(--muted); line-height:1.5;"><%= row[5] %></p>
+            <p style="font-size:0.82rem; color:var(--muted); line-height:1.5; margin-bottom:6px;"><%= row[5] %></p>
+          <% } %>
+          <% if (row[6]) { %>
+            <div style="font-size:0.8rem; background:var(--bg); padding:8px 10px; border-radius:6px; margin-top:4px;">
+              <span style="font-weight:600; color:var(--text-mid);">Notes:</span>
+              <span style="color:var(--muted);"><%= row[6] %></span>
+            </div>
           <% } %>
         </div>
       <% }); %>

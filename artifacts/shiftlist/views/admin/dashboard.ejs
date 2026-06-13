@@ -14,41 +14,34 @@
       <p>Overview of your team</p>
     </div>
 
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-value"><%= employeeCount %></div>
-        <div class="stat-label">Staff</div>
+    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; margin-bottom:16px;">
+      <div class="panel" style="text-align:center;">
+        <div style="font-size:2rem; font-weight:800; color:var(--brand);"><%= employeeCount %></div>
+        <div style="font-size:0.85rem; color:var(--muted);">Staff</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-value"><%= shiftNames.length %></div>
-        <div class="stat-label">Shift Types</div>
+      <div class="panel" style="text-align:center;">
+        <div style="font-size:2rem; font-weight:800; color:var(--brand);"><%= taskCount %></div>
+        <div style="font-size:0.85rem; color:var(--muted);">Tasks</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-value"><%= upcomingCount %></div>
-        <div class="stat-label">Scheduled</div>
+      <div class="panel" style="text-align:center;">
+        <div style="font-size:2rem; font-weight:800; color:var(--brand);"><%= shiftCount %></div>
+        <div style="font-size:0.85rem; color:var(--muted);">Shifts</div>
+      </div>
+      <div class="panel" style="text-align:center;">
+        <div style="font-size:2rem; font-weight:800; color:var(--success);"><%= publishedCount %></div>
+        <div style="font-size:0.85rem; color:var(--muted);">Published today</div>
       </div>
     </div>
 
-    <% if (shiftNames.length > 0) { %>
-      <div class="panel">
-        <h2 style="margin-bottom:10px;">Shift Types</h2>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <% shiftNames.forEach(function(s) { %>
-            <span class="shift-badge" style="font-size:0.88rem; padding:6px 14px;"><%= s %></span>
-          <% }); %>
-        </div>
+    <div class="panel">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <h2 style="font-size:1rem;">Quick Links</h2>
       </div>
-    <% } else { %>
-      <div class="alert alert-info">
-        No shifts set up yet — go to <strong>Shifts</strong> to create templates.
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <a href="/admin/schedule?date=<%= today %>" class="btn btn-primary btn-full">Schedule Today</a>
+        <a href="/admin/shifts" class="btn btn-ghost btn-full">Edit Shift Templates</a>
+        <a href="/admin/reports" class="btn btn-ghost btn-full">View Reports</a>
       </div>
-    <% } %>
-
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      <a href="/admin/employees" class="btn btn-outline btn-full">👥 Manage Staff</a>
-      <a href="/admin/shifts"    class="btn btn-outline btn-full">📋 Shift Templates</a>
-      <a href="/admin/schedule"  class="btn btn-outline btn-full">📅 Shift Calendar</a>
-      <a href="/admin/reports"   class="btn btn-outline btn-full">📊 View Reports</a>
     </div>
   </div>
 </body>
