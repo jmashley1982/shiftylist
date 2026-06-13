@@ -449,9 +449,6 @@ importers:
       express-session:
         specifier: ^1.19.0
         version: 1.19.0
-      googleapis:
-        specifier: ^173.0.0
-        version: 173.0.0
       pino:
         specifier: ^9.14.0
         version: 9.14.0

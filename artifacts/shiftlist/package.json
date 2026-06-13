@@ -19,7 +19,6 @@
     "ejs": "^6.0.1",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
-    "googleapis": "^173.0.0",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0"
   },
