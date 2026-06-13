@@ -160,6 +160,8 @@
     <% } %>
   </div>
 
+  <div id="saveToast" class="save-toast toast-hidden" aria-live="polite"></div>
+
   <script>
     function goToDate() {
       const d = document.getElementById('datePicker').value;
@@ -167,6 +169,32 @@
     }
 
     (function () {
+      // ── Feedback helpers ─────────────────────────────────────────────────────
+      var toastTimer = null;
+      function showToast(msg, isError) {
+        var toast = document.getElementById('saveToast');
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.className = 'save-toast' + (isError ? ' toast-error' : '');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.classList.add('toast-hidden'); }, 3000);
+      }
+
+      function flashRow(rowEl) {
+        if (!rowEl) return;
+        rowEl.classList.remove('row-saved');
+        void rowEl.offsetWidth;
+        rowEl.classList.add('row-saved');
+        setTimeout(function () { rowEl.classList.remove('row-saved'); }, 1200);
+      }
+
+      function flashList(listEl) {
+        listEl.classList.remove('list-saved');
+        void listEl.offsetWidth;
+        listEl.classList.add('list-saved');
+        setTimeout(function () { listEl.classList.remove('list-saved'); }, 1200);
+      }
+
       // ── Helpers ─────────────────────────────────────────────────────────────
       function refreshNums(list) {
         list.querySelectorAll('.task-row').forEach(function (row, i) {
@@ -184,7 +212,10 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ids: ids }),
-        }).catch(function () {});
+        }).then(function (r) {
+          if (r.ok) { flashList(list); }
+          else { showToast('Failed to save order — try again', true); }
+        }).catch(function () { showToast('Failed to save order — check your connection', true); });
       }
 
       // ── Inline edit ─────────────────────────────────────────────────────────
@@ -212,9 +243,9 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: val }),
           }).then(function (r) {
-            if (r.ok) { original = val; }
-            else { span.textContent = original; }
-          }).catch(function () { span.textContent = original; });
+            if (r.ok) { original = val; flashRow(row); }
+            else { span.textContent = original; showToast('Failed to rename — try again', true); }
+          }).catch(function () { span.textContent = original; showToast('Failed to rename — check your connection', true); });
         });
 
         span.addEventListener('keydown', function (e) {
