@@ -11,8 +11,15 @@
   <div class="main-content">
     <div class="page-header" style="margin-top:12px;">
       <h1>Reports</h1>
-      <p>Submissions from the last 30 days</p>
+      <p>Submissions from the last 30 days<% if (employeeFilter) { %> &mdash; <strong><%= employeeFilter %></strong><% } %></p>
     </div>
+
+    <% if (employeeFilter) { %>
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; padding:8px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; font-size:0.88rem; color:var(--muted);">
+        <span>Filtered to: <strong style="color:var(--text);"><%= employeeFilter %></strong></span>
+        <a href="/admin/reports" style="margin-left:auto; color:var(--brand); text-decoration:none; font-size:0.82rem;">Clear filter ✕</a>
+      </div>
+    <% } %>
 
     <% if (dbError) { %>
       <div class="alert alert-error">Could not load reports. Please try refreshing the page.</div>

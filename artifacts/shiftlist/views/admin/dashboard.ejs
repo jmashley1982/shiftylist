@@ -33,6 +33,35 @@
       </div>
     </div>
 
+    <div class="panel" style="margin-bottom:16px;">
+      <h2 style="font-size:1rem; margin-bottom:12px;">Recent Activity <span style="font-size:0.78rem; font-weight:400; color:var(--muted);">— last 30 days</span></h2>
+      <% if (staffActivity.length === 0) { %>
+        <p style="color:var(--muted); font-size:0.9rem; margin:0;">No submissions yet.</p>
+      <% } else { %>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <% staffActivity.forEach(function(staff) { %>
+            <a href="/admin/reports?employee=<%= encodeURIComponent(staff.employee_name) %>"
+               style="display:flex; align-items:center; justify-content:space-between; text-decoration:none; padding:10px 12px; background:var(--surface2); border-radius:8px; border:1px solid var(--border); transition:border-color 0.15s;"
+               onmouseover="this.style.borderColor='var(--brand)'" onmouseout="this.style.borderColor='var(--border)'">
+              <div>
+                <div style="font-weight:600; color:var(--text); font-size:0.95rem;"><%= staff.employee_name %></div>
+                <div style="font-size:0.78rem; color:var(--muted); margin-top:2px;">
+                  <%= staff.submission_count %> submission<%= staff.submission_count === 1 ? '' : 's' %>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <% var pct = staff.avg_completion_pct; %>
+                <div style="font-size:1.25rem; font-weight:800; color:<%= pct >= 90 ? 'var(--brand)' : pct >= 70 ? '#f59e0b' : '#ef4444' %>;">
+                  <%= pct !== null ? pct + '%' : '—' %>
+                </div>
+                <div style="font-size:0.72rem; color:var(--muted);">avg completion</div>
+              </div>
+            </a>
+          <% }); %>
+        </div>
+      <% } %>
+    </div>
+
     <div class="panel">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
         <h2 style="font-size:1rem;">Quick Links</h2>

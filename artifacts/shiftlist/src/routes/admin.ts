@@ -73,15 +73,40 @@ async function bulkRenormalizeOrder(
 
 // ════════════════════════════════════ Dashboard ═════════════════════════════════
 router.get("/dashboard", async (_req, res) => {
-  const empCount = (await pool.query("SELECT COUNT(*) as count FROM employees")).rows[0].count;
-  const shiftCount = (await pool.query("SELECT COUNT(*) as count FROM shifts")).rows[0].count;
-  const taskCount = (await pool.query("SELECT COUNT(*) as count FROM tasks")).rows[0].count;
   const today = getTodayStr();
-  const extraCount = (await pool.query(
-    "SELECT COUNT(*) as count FROM extra_day_tasks WHERE date >= $1",
-    [today]
-  )).rows[0].count;
-  res.render("admin/dashboard", { employeeCount: empCount, shiftCount, taskCount, customCount: extraCount, today });
+  const [empRes, shiftRes, taskRes, extraRes, activityRes] = await Promise.all([
+    pool.query("SELECT COUNT(*) as count FROM employees"),
+    pool.query("SELECT COUNT(*) as count FROM shifts"),
+    pool.query("SELECT COUNT(*) as count FROM tasks"),
+    pool.query("SELECT COUNT(*) as count FROM extra_day_tasks WHERE date >= $1", [today]),
+    pool.query(`
+      WITH parsed AS (
+        SELECT
+          employee_name,
+          (SELECT COUNT(*) FROM unnest(string_to_array(task_summary, ' | ')) AS item WHERE item LIKE '✓%') AS completed,
+          array_length(string_to_array(task_summary, ' | '), 1) AS total
+        FROM submissions
+        WHERE submitted_at >= NOW() - INTERVAL '30 days'
+          AND task_summary <> ''
+      )
+      SELECT
+        employee_name,
+        COUNT(*)::int AS submission_count,
+        ROUND(AVG(CASE WHEN total > 0 THEN completed::float / total * 100 ELSE NULL END))::int AS avg_completion_pct
+      FROM parsed
+      GROUP BY employee_name
+      ORDER BY employee_name
+    `),
+  ]);
+
+  res.render("admin/dashboard", {
+    employeeCount: empRes.rows[0].count,
+    shiftCount: shiftRes.rows[0].count,
+    taskCount: taskRes.rows[0].count,
+    customCount: extraRes.rows[0].count,
+    staffActivity: activityRes.rows as { employee_name: string; submission_count: number; avg_completion_pct: number | null }[],
+    today,
+  });
 });
 
 // ════════════════════════════════════ Employees ════════════════════════════════
@@ -313,11 +338,17 @@ router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {
 });
 
 // ════════════════════════════════════ Reports ═════════════════════════════════
-router.get("/reports", async (_req, res) => {
+router.get("/reports", async (req, res) => {
   try {
     await pool.query("DELETE FROM submissions WHERE submitted_at < NOW() - INTERVAL '30 days'");
+    const employeeFilter = typeof req.query.employee === "string" && req.query.employee.trim()
+      ? req.query.employee.trim()
+      : null;
     const rows = (await pool.query(
-      "SELECT * FROM submissions WHERE submitted_at >= NOW() - INTERVAL '30 days' ORDER BY submitted_at DESC"
+      employeeFilter
+        ? "SELECT * FROM submissions WHERE submitted_at >= NOW() - INTERVAL '30 days' AND employee_name = $1 ORDER BY submitted_at DESC"
+        : "SELECT * FROM submissions WHERE submitted_at >= NOW() - INTERVAL '30 days' ORDER BY submitted_at DESC",
+      employeeFilter ? [employeeFilter] : []
     )).rows;
 
     const shiftOrder = (n: string) => {
@@ -350,11 +381,11 @@ router.get("/reports", async (_req, res) => {
         return { date, label, shifts };
       });
 
-    res.render("admin/reports", { groups, dbError: false });
+    res.render("admin/reports", { groups, dbError: false, employeeFilter });
   } catch (err) {
     const { logger } = await import("../lib/logger.js");
     logger.error({ err }, "Failed to load submissions from DB");
-    res.render("admin/reports", { groups: [], dbError: true });
+    res.render("admin/reports", { groups: [], dbError: true, employeeFilter: null });
   }
 });
 
