@@ -57,7 +57,7 @@ function hubUrl(shiftId: number | string, date?: string): string {
  */
 async function bulkRenormalizeOrder(
   client: PoolClient,
-  table: "shift_tasks",
+  table: "shift_tasks" | "extra_day_tasks",
   ids: number[]
 ): Promise<void> {
   if (ids.length === 0) return;
@@ -265,6 +265,22 @@ router.post("/shifts/:shiftId/day/:date/add-extra", async (req, res) => {
 router.post("/shifts/:shiftId/day/:date/remove-extra/:id", async (req, res) => {
   await pool.query("DELETE FROM extra_day_tasks WHERE id = $1", [Number(req.params.id)]);
   res.redirect(hubUrl(req.params.shiftId, req.params.date));
+});
+
+router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {
+  const shiftId = Number(req.params.shiftId);
+  const { date } = req.params;
+  const ids = (req.body.ids as unknown[]);
+  if (!Array.isArray(ids) || ids.length === 0) return void res.json({ ok: false });
+  const idArray = ids.map(Number).filter(n => n > 0);
+  await withTransaction(async (client) => {
+    await client.query(
+      "SELECT id FROM extra_day_tasks WHERE shift_id = $1 AND date = $2 LIMIT 1 FOR UPDATE",
+      [shiftId, date]
+    );
+    await bulkRenormalizeOrder(client, "extra_day_tasks", idArray);
+  });
+  res.json({ ok: true });
 });
 
 // ════════════════════════════════════ Reports ═════════════════════════════════

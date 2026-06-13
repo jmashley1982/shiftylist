@@ -121,10 +121,12 @@
           </form>
 
           <% if (extraTasks.length > 0) { %>
-            <div style="display:flex; flex-direction:column; gap:6px;">
+            <div class="task-edit-list"
+                 data-reorder-url="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/reorder-extra">
               <% extraTasks.forEach(function(task, idx) { %>
-                <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border);">
-                  <span style="color:var(--muted); font-size:0.78rem; font-weight:700; min-width:22px;"><%= idx + 1 %>.</span>
+                <div class="task-row" draggable="true" data-id="<%= task.id %>">
+                  <span class="drag-handle" title="Drag to reorder">⠿</span>
+                  <span class="task-num"><%= idx + 1 %>.</span>
                   <span style="flex:1; font-size:0.9rem;"><%= task.task_name %></span>
                   <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/remove-extra/<%= task.id %>"
                         onsubmit="return confirm('Remove this extra task?')" style="flex-shrink:0;">
