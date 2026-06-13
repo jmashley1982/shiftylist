@@ -3,78 +3,222 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Shift Templates</title>
+  <title>Shifts</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <%- include('../partials/admin-nav', { active: 'shifts' }) %>
   <div class="main-content">
     <div class="page-header" style="margin-top:12px;">
-      <h1>Shift Templates</h1>
-      <p>Define which tasks belong to each shift type</p>
+      <h1>Shifts</h1>
+      <p>Build each shift's checklist. It's live for staff the moment you add a task.</p>
     </div>
 
-    <div class="panel">
-      <div class="panel-header"><h2>New Shift Type</h2></div>
-      <form method="POST" action="/admin/shifts/add" class="form-stack">
-        <div class="form-group">
-          <label>Shift Name</label>
-          <input type="text" name="name" placeholder="e.g. Open, Mid, Close" required>
-        </div>
-        <button type="submit" class="btn btn-primary btn-full">Create Shift</button>
-      </form>
-    </div>
-
-    <% shifts.forEach(function(shift) {
-      const myTasks = shiftTasks.filter(function(st) { return st.shift_id === shift.id; });
-    %>
+    <% if (shifts.length === 0) { %>
       <div class="panel">
-        <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between;">
-          <h2><span class="shift-badge" style="font-size:0.9rem;"><%= shift.name %></span></h2>
-          <span style="color:var(--muted); font-size:0.82rem;"><%= myTasks.length %> tasks</span>
+        <div class="panel-header"><h2>Create your first shift</h2></div>
+        <form method="POST" action="/admin/shifts/add" class="form-stack">
+          <div class="form-group">
+            <label>Shift name</label>
+            <input type="text" name="name" placeholder="e.g. Open, Mid, Close" required autofocus>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">Create shift</button>
+        </form>
+      </div>
+    <% } else { %>
+
+      <!-- Shift picker -->
+      <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+        <% shifts.forEach(function(s) { %>
+          <a href="/admin/shifts?shift=<%= s.id %>"
+             class="btn btn-sm <%= selectedShift && s.id === selectedShift.id ? 'btn-primary' : 'btn-ghost' %>"
+             style="flex:1; min-width:80px;"><%= s.name %></a>
+        <% }); %>
+      </div>
+
+      <!-- Mode toggle: standing list vs a specific day -->
+      <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <a href="/admin/shifts?shift=<%= selectedShift.id %>"
+           class="btn btn-sm <%= !dayMode ? 'btn-primary' : 'btn-ghost' %>" style="flex:1;">Standing list</a>
+        <a href="/admin/shifts?shift=<%= selectedShift.id %>&date=<%= today %>"
+           class="btn btn-sm <%= dayMode ? 'btn-primary' : 'btn-ghost' %>" style="flex:1;">A specific day</a>
+      </div>
+
+      <datalist id="taskSuggestions">
+        <% allTasks.forEach(function(t) { %><option value="<%= t.name %>"></option><% }); %>
+      </datalist>
+
+      <% if (!dayMode) { %>
+        <!-- ───────────────── STANDING LIST ───────────────── -->
+        <div class="panel">
+          <div class="panel-header">
+            <h2><span class="shift-badge"><%= selectedShift.name %></span></h2>
+            <span style="color:var(--muted); font-size:0.82rem;"><%= standingTasks.length %> tasks</span>
+          </div>
+
+          <div class="alert alert-success" style="margin-bottom:14px;">
+            Always live — staff on the <%= selectedShift.name %> shift see this list today.
+          </div>
+
+          <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/add"
+                style="display:flex; gap:8px; margin-bottom:14px;">
+            <input type="text" name="name" list="taskSuggestions" placeholder="Type a task and press Enter…"
+                   required autofocus autocomplete="off" style="flex:1;">
+            <button type="submit" class="btn btn-primary btn-sm">Add</button>
+          </form>
+
+          <% if (standingTasks.length > 0) { %>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <% standingTasks.forEach(function(task, idx) { %>
+                <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border);">
+                  <span style="color:var(--muted); font-size:0.78rem; font-weight:700; min-width:22px;"><%= idx + 1 %>.</span>
+                  <span style="flex:1; font-size:0.9rem;"><%= task.task_name %></span>
+                  <div style="display:flex; gap:4px;">
+                    <% if (idx > 0) { %>
+                      <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/move/<%= task.id %>" style="display:inline;">
+                        <input type="hidden" name="direction" value="up">
+                        <button type="submit" class="btn btn-ghost btn-sm">↑</button>
+                      </form>
+                    <% } %>
+                    <% if (idx < standingTasks.length - 1) { %>
+                      <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/move/<%= task.id %>" style="display:inline;">
+                        <input type="hidden" name="direction" value="down">
+                        <button type="submit" class="btn btn-ghost btn-sm">↓</button>
+                      </form>
+                    <% } %>
+                    <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/remove/<%= task.id %>" style="display:inline;" onsubmit="return confirm('Remove this task?')">
+                      <button type="submit" class="btn btn-danger btn-sm">✕</button>
+                    </form>
+                  </div>
+                </div>
+              <% }); %>
+            </div>
+          <% } else { %>
+            <p style="color:var(--muted); font-size:0.88rem;">No tasks yet. Type one above to start building this shift.</p>
+          <% } %>
         </div>
 
-        <form method="POST" action="/admin/shifts/<%= shift.id %>/add-task" style="display:flex; gap:8px; margin-bottom:12px;">
-          <select name="taskId" required style="flex:1;">
-            <option value="">Add task…</option>
-            <% tasks.forEach(function(t) { %>
-              <option value="<%= t.id %>"><%= t.name %></option>
-            <% }); %>
-          </select>
+      <% } else { %>
+        <!-- ───────────────── SPECIFIC DAY ───────────────── -->
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
+          <a href="/admin/shifts?shift=<%= selectedShift.id %>&date=<%= prevDate %>" class="btn btn-ghost btn-sm">←</a>
+          <div style="display:flex; align-items:center; gap:8px; flex:1;">
+            <input type="date" id="datePicker" value="<%= date %>" style="flex:1; font-size:0.95rem; padding:6px 10px;">
+            <button onclick="goToDate()" class="btn btn-primary btn-sm">Go</button>
+          </div>
+          <a href="/admin/shifts?shift=<%= selectedShift.id %>&date=<%= nextDate %>" class="btn btn-ghost btn-sm">→</a>
+        </div>
+
+        <div style="text-align:center; font-size:0.85rem; color:var(--muted); margin-bottom:16px;">
+          <%= date === today ? 'Today · ' : '' %><%= formatDateDisplay(date) %>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2><span class="shift-badge"><%= selectedShift.name %></span></h2>
+            <% if (hasOverride) { %>
+              <span style="font-size:0.72rem; background:#f59e0b; color:#1a1a1a; padding:2px 8px; border-radius:4px; font-weight:700;">Custom day</span>
+            <% } else { %>
+              <span style="font-size:0.72rem; background:var(--brand); color:#fff; padding:2px 8px; border-radius:4px; font-weight:700;">Standing</span>
+            <% } %>
+          </div>
+
+          <% if (!hasOverride) { %>
+            <div class="alert alert-info" style="margin-bottom:14px;">
+              This day uses the standing <%= selectedShift.name %> list. Customize it to change just this day.
+            </div>
+            <% if (standingTasks.length > 0) { %>
+              <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px; opacity:0.8;">
+                <% standingTasks.forEach(function(task, idx) { %>
+                  <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border);">
+                    <span style="color:var(--muted); font-size:0.78rem; font-weight:700; min-width:22px;"><%= idx + 1 %>.</span>
+                    <span style="flex:1; font-size:0.9rem;"><%= task.task_name %></span>
+                  </div>
+                <% }); %>
+              </div>
+            <% } else { %>
+              <p style="color:var(--muted); font-size:0.88rem; margin-bottom:14px;">The standing list is empty.</p>
+            <% } %>
+            <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/customize">
+              <button type="submit" class="btn btn-primary btn-full">Customize this day</button>
+            </form>
+
+          <% } else { %>
+            <div class="alert alert-warning" style="margin-bottom:14px;">
+              Custom list for <%= formatDateDisplay(date) %> — staff see this instead of the standing list on this day.
+            </div>
+
+            <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/add"
+                  style="display:flex; gap:8px; margin-bottom:14px;">
+              <input type="text" name="name" list="taskSuggestions" placeholder="Type a task and press Enter…"
+                     required autofocus autocomplete="off" style="flex:1;">
+              <button type="submit" class="btn btn-primary btn-sm">Add</button>
+            </form>
+
+            <% if (dayTasks.length > 0) { %>
+              <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+                <% dayTasks.forEach(function(task, idx) { %>
+                  <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border);">
+                    <span style="color:var(--muted); font-size:0.78rem; font-weight:700; min-width:22px;"><%= idx + 1 %>.</span>
+                    <span style="flex:1; font-size:0.9rem;"><%= task.task_name %></span>
+                    <div style="display:flex; gap:4px;">
+                      <% if (idx > 0) { %>
+                        <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/move/<%= task.id %>" style="display:inline;">
+                          <input type="hidden" name="direction" value="up">
+                          <button type="submit" class="btn btn-ghost btn-sm">↑</button>
+                        </form>
+                      <% } %>
+                      <% if (idx < dayTasks.length - 1) { %>
+                        <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/move/<%= task.id %>" style="display:inline;">
+                          <input type="hidden" name="direction" value="down">
+                          <button type="submit" class="btn btn-ghost btn-sm">↓</button>
+                        </form>
+                      <% } %>
+                      <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/remove/<%= task.id %>" style="display:inline;" onsubmit="return confirm('Remove this task?')">
+                        <button type="submit" class="btn btn-danger btn-sm">✕</button>
+                      </form>
+                    </div>
+                  </div>
+                <% }); %>
+              </div>
+            <% } else { %>
+              <p style="color:var(--muted); font-size:0.88rem; margin-bottom:14px;">No tasks for this day. Add some above.</p>
+            <% } %>
+
+            <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/revert"
+                  onsubmit="return confirm('Revert to the standing list? This removes the custom list for this day.')">
+              <button type="submit" class="btn btn-ghost btn-full">Revert to standing list</button>
+            </form>
+          <% } %>
+        </div>
+      <% } %>
+
+      <!-- Add / remove shift types -->
+      <div class="panel">
+        <div class="panel-header"><h2 style="font-size:1rem;">Manage shifts</h2></div>
+        <form method="POST" action="/admin/shifts/add" style="display:flex; gap:8px; margin-bottom:12px;">
+          <input type="text" name="name" placeholder="New shift name…" required style="flex:1;">
           <button type="submit" class="btn btn-primary btn-sm">Add</button>
         </form>
-
-        <% if (myTasks.length > 0) { %>
-          <div style="display:flex; flex-direction:column; gap:8px;">
-            <% myTasks.forEach(function(task, idx) { %>
-              <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border);">
-                <span style="color:var(--muted); font-size:0.78rem; font-weight:700; min-width:24px;">#<%= task.display_order %></span>
-                <span style="flex:1; font-size:0.9rem;"><%= task.task_name %></span>
-                <div style="display:flex; gap:4px;">
-                  <% if (idx > 0) { %>
-                    <form method="POST" action="/admin/shifts/<%= shift.id %>/move-task/<%= task.id %>" style="display:inline;">
-                      <input type="hidden" name="direction" value="up">
-                      <button type="submit" class="btn btn-ghost btn-sm">↑</button>
-                    </form>
-                  <% } %>
-                  <% if (idx < myTasks.length - 1) { %>
-                    <form method="POST" action="/admin/shifts/<%= shift.id %>/move-task/<%= task.id %>" style="display:inline;">
-                      <input type="hidden" name="direction" value="down">
-                      <button type="submit" class="btn btn-ghost btn-sm">↓</button>
-                    </form>
-                  <% } %>
-                  <form method="POST" action="/admin/shifts/<%= shift.id %>/remove-task/<%= task.id %>" style="display:inline;" onsubmit="return confirm('Remove this task from <%= shift.name %>?')">
-                    <button type="submit" class="btn btn-danger btn-sm">✕</button>
-                  </form>
-                </div>
-              </div>
-            <% }); %>
-          </div>
-        <% } else { %>
-          <p style="color:var(--muted); font-size:0.88rem;">No tasks assigned yet.</p>
-        <% } %>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <% shifts.forEach(function(s) { %>
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border);">
+              <span style="flex:1; font-size:0.9rem;"><%= s.name %></span>
+              <form method="POST" action="/admin/shifts/delete/<%= s.id %>" onsubmit="return confirm('Delete the <%= s.name %> shift and its checklist?')">
+                <button type="submit" class="btn btn-danger btn-sm">✕</button>
+              </form>
+            </div>
+          <% }); %>
+        </div>
       </div>
-    <% }); %>
+    <% } %>
   </div>
+
+  <script>
+    function goToDate() {
+      const d = document.getElementById('datePicker').value;
+      if (d) window.location.href = '/admin/shifts?shift=<%= selectedShift ? selectedShift.id : '' %>&date=' + d;
+    }
+  </script>
 </body>
 </html>

@@ -43,7 +43,16 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 - **Task checklist**: Tick off tasks with timestamps, add notes
 - **Incomplete task validation**: If not all tasks checked → modal asks to confirm and add a note
 - **Report submission**: Tasks + notes logged to Google Sheets with timestamps
-- **Admin panel**: Manage employees, reusable task templates, shift templates (Open/Mid/Close), schedule daily shifts (date picker, publish/unpublish, add/remove/reorder tasks), view reports
+- **Admin panel**: Manage employees, view reports, and a single **Shifts** hub to build each shift's checklist:
+  - **Standing list (always live)**: Each shift (Open/Mid/Close) has one checklist. Type a task and press Add — it's created (or reused) and instantly what staff see today. No publish step. Reorder/remove inline.
+  - **Specific day (optional override)**: Pick a date to customize just that day. It starts as a copy of the standing list; edits apply only to that date and override the standing list for staff on that day. "Revert to standing list" removes the override.
+
+## Admin workflow model
+
+- The old separate Tasks / Shifts / Schedule screens are unified into one `/admin/shifts` hub. `?shift=<id>` selects which shift; `?date=<yyyy-mm-dd>` switches to per-day override mode.
+- Staff (`/staff/tasks`) read the day override for today if one exists, otherwise the shift's standing list. There is no required daily publish.
+- A day override is materialized in `daily_shifts` + `daily_shift_tasks` only when admin clicks "Customize this day" (or adds a task in day mode). Reverting deletes the `daily_shifts` row (cascade removes its tasks).
+- Tasks are created-or-reused by name via `INSERT … ON CONFLICT (name) DO UPDATE … RETURNING id`; the `tasks` table backs autocomplete suggestions.
 
 ## User preferences
 - Dark theme with teal (#38b6a0) accents matching the Viking Vapor & Smoke logo

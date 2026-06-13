@@ -16,29 +16,33 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
     return void res.redirect("/select-shift");
   }
 
-  // Find the daily shift for today + selected shift
-  const dailyShiftResult = await pool.query(
-    "SELECT * FROM daily_shifts WHERE date = $1 AND shift_id = $2 AND is_published = true",
+  // A single-day override takes precedence over the always-live standing list.
+  const dailyShift = (await pool.query(
+    "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
     [today, shiftId]
-  );
-  const dailyShift = dailyShiftResult.rows[0];
+  )).rows[0];
 
-  if (!dailyShift) {
-    return void res.render("noTasks", {
-      employeeName: req.session.employeeName,
-    });
+  let taskRows: { task_name: string }[];
+  if (dailyShift) {
+    taskRows = (await pool.query(`
+      SELECT t.name as task_name
+      FROM daily_shift_tasks dst
+      JOIN tasks t ON t.id = dst.task_id
+      WHERE dst.daily_shift_id = $1
+      ORDER BY dst.display_order
+    `, [dailyShift.id])).rows;
+  } else {
+    // No override → use the shift's standing checklist.
+    taskRows = (await pool.query(`
+      SELECT t.name as task_name
+      FROM shift_tasks st
+      JOIN tasks t ON t.id = st.task_id
+      WHERE st.shift_id = $1
+      ORDER BY st.display_order
+    `, [shiftId])).rows;
   }
 
-  // Get tasks for this daily shift
-  const tasksResult = await pool.query(`
-    SELECT dst.id, dst.task_id, dst.display_order, t.name as task_name
-    FROM daily_shift_tasks dst
-    JOIN tasks t ON t.id = dst.task_id
-    WHERE dst.daily_shift_id = $1
-    ORDER BY dst.display_order
-  `, [dailyShift.id]);
-
-  const tasks = tasksResult.rows.map((t: { task_name: string }) => ({ text: t.task_name }));
+  const tasks = taskRows.map((t: { task_name: string }) => ({ text: t.task_name }));
 
   if (tasks.length === 0) {
     return void res.render("noTasks", {

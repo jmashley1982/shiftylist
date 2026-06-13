@@ -7,17 +7,41 @@ import { getSubmissionsLast30Days } from "../utils/sheets.js";
 const router = Router();
 router.use(ensureAdminAuth);
 
+// ════════════════════════════════════ Helpers ═══════════════════════════════════
+function getOffsetDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+/** Create the task by name if new, otherwise reuse the existing one. Returns its id. */
+async function upsertTaskByName(name: string): Promise<number> {
+  const res = await pool.query(
+    `INSERT INTO tasks (name) VALUES ($1)
+     ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+     RETURNING id`,
+    [name]
+  );
+  return res.rows[0].id as number;
+}
+
+/** Build the redirect URL back to the shifts hub, preserving shift + optional day. */
+function hubUrl(shiftId: number | string, date?: string): string {
+  const base = `/admin/shifts?shift=${shiftId}`;
+  return date ? `${base}&date=${date}` : base;
+}
+
 // ════════════════════════════════════ Dashboard ═════════════════════════════════
 router.get("/dashboard", async (_req, res) => {
   const empCount = (await pool.query("SELECT COUNT(*) as count FROM employees")).rows[0].count;
   const shiftCount = (await pool.query("SELECT COUNT(*) as count FROM shifts")).rows[0].count;
   const taskCount = (await pool.query("SELECT COUNT(*) as count FROM tasks")).rows[0].count;
   const today = getTodayStr();
-  const publishedCount = (await pool.query(
-    "SELECT COUNT(*) as count FROM daily_shifts WHERE date = $1 AND is_published = true",
+  const customCount = (await pool.query(
+    "SELECT COUNT(*) as count FROM daily_shifts WHERE date >= $1",
     [today]
   )).rows[0].count;
-  res.render("admin/dashboard", { employeeCount: empCount, shiftCount, taskCount, publishedCount, today });
+  res.render("admin/dashboard", { employeeCount: empCount, shiftCount, taskCount, customCount, today });
 });
 
 // ════════════════════════════════════ Employees ════════════════════════════════
@@ -47,53 +71,85 @@ router.post("/employees/delete/:id", async (req, res) => {
   res.redirect("/admin/employees");
 });
 
-// ════════════════════════════════════ Tasks ════════════════════════════════════
-router.get("/tasks", async (_req, res) => {
-  const tasks = (await pool.query("SELECT * FROM tasks ORDER BY name")).rows;
-  res.render("admin/tasks", { tasks, error: null });
-});
+// ════════════════════════════════════ Shifts hub ════════════════════════════════
+// One screen to build a shift's standing checklist (always live) and optionally
+// tweak a single day. Picks shift via ?shift= and day mode via ?date=.
+router.get("/shifts", async (req, res) => {
+  const shifts = (await pool.query("SELECT * FROM shifts ORDER BY id")).rows;
 
-router.post("/tasks/add", async (req, res) => {
-  const { name } = req.body as { name: string };
-  if (!name?.trim()) return void res.redirect("/admin/tasks");
-  try {
-    await pool.query("INSERT INTO tasks (name) VALUES ($1)", [name.trim()]);
-  } catch {
-    // duplicate
+  const requestedShift = Number(req.query.shift);
+  const selectedShift =
+    shifts.find((s: { id: number }) => s.id === requestedShift) || shifts[0] || null;
+
+  // Autocomplete suggestions from the reusable task library.
+  const allTasks = (await pool.query("SELECT * FROM tasks ORDER BY name")).rows;
+
+  // Standing list for the selected shift.
+  let standingTasks: { id: number; task_name: string; display_order: number }[] = [];
+  if (selectedShift) {
+    standingTasks = (await pool.query(
+      `SELECT st.id, st.display_order, t.name as task_name
+       FROM shift_tasks st
+       JOIN tasks t ON t.id = st.task_id
+       WHERE st.shift_id = $1
+       ORDER BY st.display_order`,
+      [selectedShift.id]
+    )).rows;
   }
-  res.redirect("/admin/tasks");
-});
 
-router.post("/tasks/edit/:id", async (req, res) => {
-  const { name } = req.body as { name: string };
-  if (name?.trim()) {
-    await pool.query("UPDATE tasks SET name = $1 WHERE id = $2", [name.trim(), Number(req.params.id)]);
+  // Day mode (optional): editing a single date's override.
+  const rawDate = req.query.date as string | undefined;
+  const dayMode = !!rawDate;
+  const date = rawDate || getTodayStr();
+  let hasOverride = false;
+  let dayTasks: { id: number; task_name: string; display_order: number }[] = [];
+  let dailyShiftId: number | null = null;
+
+  if (selectedShift && dayMode) {
+    const ds = (await pool.query(
+      "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
+      [date, selectedShift.id]
+    )).rows[0];
+    if (ds) {
+      hasOverride = true;
+      dailyShiftId = ds.id;
+      dayTasks = (await pool.query(
+        `SELECT dst.id, dst.display_order, t.name as task_name
+         FROM daily_shift_tasks dst
+         JOIN tasks t ON t.id = dst.task_id
+         WHERE dst.daily_shift_id = $1
+         ORDER BY dst.display_order`,
+        [ds.id]
+      )).rows;
+    }
   }
-  res.redirect("/admin/tasks");
+
+  res.render("admin/shifts", {
+    shifts,
+    selectedShift,
+    allTasks,
+    standingTasks,
+    dayMode,
+    date,
+    today: getTodayStr(),
+    prevDate: getOffsetDate(date, -1),
+    nextDate: getOffsetDate(date, 1),
+    hasOverride,
+    dayTasks,
+    dailyShiftId,
+    formatDateDisplay,
+  });
 });
 
-router.post("/tasks/delete/:id", async (req, res) => {
-  await pool.query("DELETE FROM tasks WHERE id = $1", [Number(req.params.id)]);
-  res.redirect("/admin/tasks");
-});
-
-// ════════════════════════════════════ Shifts ═══════════════════════════════════
-router.get("/shifts", async (_req, res) => {
-  const shifts = (await pool.query("SELECT * FROM shifts ORDER BY name")).rows;
-  const tasks = (await pool.query("SELECT * FROM tasks ORDER BY name")).rows;
-  const shiftTasks = (await pool.query(`
-    SELECT st.id, st.shift_id, st.task_id, st.display_order, t.name as task_name
-    FROM shift_tasks st
-    JOIN tasks t ON t.id = st.task_id
-    ORDER BY st.shift_id, st.display_order
-  `)).rows;
-  res.render("admin/shifts", { shifts, tasks, shiftTasks });
-});
-
+// ── Shift types ──────────────────────────────────────────────────────────────
 router.post("/shifts/add", async (req, res) => {
   const { name } = req.body as { name: string };
   if (name?.trim()) {
-    await pool.query("INSERT INTO shifts (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", [name.trim()]);
+    const r = await pool.query(
+      "INSERT INTO shifts (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING id",
+      [name.trim()]
+    );
+    if (r.rows[0]) return void res.redirect(hubUrl(r.rows[0].id));
   }
   res.redirect("/admin/shifts");
 });
@@ -103,26 +159,31 @@ router.post("/shifts/delete/:id", async (req, res) => {
   res.redirect("/admin/shifts");
 });
 
-router.post("/shifts/:shiftId/add-task", async (req, res) => {
+// ── Standing list (always live) ──────────────────────────────────────────────
+router.post("/shifts/:shiftId/standing/add", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
-  const taskId = Number(req.body.taskId);
-  const maxOrder = (await pool.query(
-    "SELECT COALESCE(MAX(display_order), -1) as max FROM shift_tasks WHERE shift_id = $1",
-    [shiftId]
-  )).rows[0].max;
-  await pool.query(
-    "INSERT INTO shift_tasks (shift_id, task_id, display_order) VALUES ($1, $2, $3) ON CONFLICT (shift_id, task_id) DO NOTHING",
-    [shiftId, taskId, maxOrder + 1]
-  );
-  res.redirect("/admin/shifts");
+  const name = (req.body.name as string)?.trim();
+  if (name) {
+    const taskId = await upsertTaskByName(name);
+    const maxOrder = (await pool.query(
+      "SELECT COALESCE(MAX(display_order), -1) as max FROM shift_tasks WHERE shift_id = $1",
+      [shiftId]
+    )).rows[0].max;
+    await pool.query(
+      `INSERT INTO shift_tasks (shift_id, task_id, display_order) VALUES ($1, $2, $3)
+       ON CONFLICT (shift_id, task_id) DO NOTHING`,
+      [shiftId, taskId, maxOrder + 1]
+    );
+  }
+  res.redirect(hubUrl(shiftId));
 });
 
-router.post("/shifts/:shiftId/remove-task/:id", async (req, res) => {
+router.post("/shifts/:shiftId/standing/remove/:id", async (req, res) => {
   await pool.query("DELETE FROM shift_tasks WHERE id = $1", [Number(req.params.id)]);
-  res.redirect("/admin/shifts");
+  res.redirect(hubUrl(req.params.shiftId));
 });
 
-router.post("/shifts/:shiftId/move-task/:id", async (req, res) => {
+router.post("/shifts/:shiftId/standing/move/:id", async (req, res) => {
   const id = Number(req.params.id);
   const shiftId = Number(req.params.shiftId);
   const direction = req.body.direction as "up" | "down";
@@ -131,97 +192,33 @@ router.post("/shifts/:shiftId/move-task/:id", async (req, res) => {
     [shiftId]
   )).rows;
   const idx = rows.findIndex((r: { id: number }) => r.id === id);
-  if (idx === -1) return void res.redirect("/admin/shifts");
+  if (idx === -1) return void res.redirect(hubUrl(shiftId));
   const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= rows.length) return void res.redirect("/admin/shifts");
-  const currentOrder = rows[idx].display_order;
-  const swapOrder = rows[swapIdx].display_order;
-  await pool.query("UPDATE shift_tasks SET display_order = $1 WHERE id = $2", [swapOrder, rows[idx].id]);
-  await pool.query("UPDATE shift_tasks SET display_order = $1 WHERE id = $2", [currentOrder, rows[swapIdx].id]);
-  res.redirect("/admin/shifts");
+  if (swapIdx < 0 || swapIdx >= rows.length) return void res.redirect(hubUrl(shiftId));
+  await pool.query("UPDATE shift_tasks SET display_order = $1 WHERE id = $2", [rows[swapIdx].display_order, rows[idx].id]);
+  await pool.query("UPDATE shift_tasks SET display_order = $1 WHERE id = $2", [rows[idx].display_order, rows[swapIdx].id]);
+  res.redirect(hubUrl(shiftId));
 });
 
-// ════════════════════════════════════ Schedule ══════════════════════════════════
-router.get("/schedule", async (req, res) => {
-  const date = (req.query.date as string) || getTodayStr();
-  const shifts = (await pool.query("SELECT * FROM shifts ORDER BY name")).rows;
-  const tasks = (await pool.query("SELECT * FROM tasks ORDER BY name")).rows;
-
-  // Get daily shifts for this date
-  const dailyShifts = (await pool.query(
-    "SELECT * FROM daily_shifts WHERE date = $1 ORDER BY shift_id",
-    [date]
-  )).rows;
-  const dailyShiftMap = Object.fromEntries(dailyShifts.map((ds: { shift_id: number }) => [ds.shift_id, ds]));
-
-  // Get daily shift tasks for this date
-  const dailyShiftTasks = (await pool.query(`
-    SELECT dst.id, dst.daily_shift_id, dst.task_id, dst.display_order, t.name as task_name, ds.shift_id
-    FROM daily_shift_tasks dst
-    JOIN daily_shifts ds ON ds.id = dst.daily_shift_id
-    JOIN tasks t ON t.id = dst.task_id
-    WHERE ds.date = $1
-    ORDER BY ds.shift_id, dst.display_order
-  `, [date])).rows;
-
-  const dailyTasksByShift: Record<number, typeof dailyShiftTasks> = {};
-  for (const s of shifts) dailyTasksByShift[s.id] = [];
-  for (const t of dailyShiftTasks) {
-    if (!dailyTasksByShift[t.shift_id]) dailyTasksByShift[t.shift_id] = [];
-    dailyTasksByShift[t.shift_id].push(t);
-  }
-
-  // Get template tasks for each shift (for pre-populate)
-  const templateTasks = (await pool.query(`
-    SELECT st.shift_id, st.task_id, st.display_order, t.name as task_name
-    FROM shift_tasks st
-    JOIN tasks t ON t.id = st.task_id
-    ORDER BY st.shift_id, st.display_order
-  `)).rows;
-  const templateTasksByShift: Record<number, typeof templateTasks> = {};
-  for (const s of shifts) templateTasksByShift[s.id] = [];
-  for (const t of templateTasks) {
-    if (!templateTasksByShift[t.shift_id]) templateTasksByShift[t.shift_id] = [];
-    templateTasksByShift[t.shift_id].push(t);
-  }
-
-  res.render("admin/schedule", {
-    shifts,
-    tasks,
-    date,
-    prevDate: getOffsetDate(date, -1),
-    nextDate: getOffsetDate(date, 1),
-    today: getTodayStr(),
-    dailyShiftMap,
-    dailyTasksByShift,
-    templateTasksByShift,
-    formatDateDisplay,
-  });
-});
-
-function getOffsetDate(dateStr: string, days: number): string {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
-}
-
-router.post("/schedule/:date/:shiftId/publish", async (req, res) => {
-  const { date, shiftId } = req.params;
-  const dsResult = await pool.query(
+// ── Single-day override ──────────────────────────────────────────────────────
+// Materialize a day override as a copy of the standing list.
+router.post("/shifts/:shiftId/day/:date/customize", async (req, res) => {
+  const shiftId = Number(req.params.shiftId);
+  const { date } = req.params;
+  const ds = await pool.query(
     `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, true)
      ON CONFLICT (date, shift_id) DO UPDATE SET is_published = true RETURNING id`,
-    [date, Number(shiftId)]
+    [date, shiftId]
   );
-  const dailyShiftId = dsResult.rows[0].id;
-  // Copy template tasks if no daily tasks exist yet
+  const dailyShiftId = ds.rows[0].id;
   const existing = (await pool.query(
     "SELECT COUNT(*) as count FROM daily_shift_tasks WHERE daily_shift_id = $1",
     [dailyShiftId]
   )).rows[0].count;
-  if (existing === 0) {
+  if (Number(existing) === 0) {
     const template = (await pool.query(
       "SELECT task_id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
-      [Number(shiftId)]
+      [shiftId]
     )).rows;
     for (const t of template) {
       await pool.query(
@@ -231,95 +228,91 @@ router.post("/schedule/:date/:shiftId/publish", async (req, res) => {
       );
     }
   }
-  res.redirect(`/admin/schedule?date=${date}`);
+  res.redirect(hubUrl(shiftId, date));
 });
 
-router.post("/schedule/:date/:shiftId/unpublish", async (req, res) => {
-  await pool.query(
-    "UPDATE daily_shifts SET is_published = false WHERE date = $1 AND shift_id = $2",
-    [req.params.date, Number(req.params.shiftId)]
-  );
-  res.redirect(`/admin/schedule?date=${req.params.date}`);
-});
-
-router.post("/schedule/:date/:shiftId/copy-template", async (req, res) => {
-  const { date, shiftId } = req.params;
-  const dsResult = await pool.query(
-    `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, true)
-     ON CONFLICT (date, shift_id) DO UPDATE SET is_published = true RETURNING id`,
-    [date, Number(shiftId)]
-  );
-  const dailyShiftId = dsResult.rows[0].id;
-  // Remove existing daily tasks
-  await pool.query("DELETE FROM daily_shift_tasks WHERE daily_shift_id = $1", [dailyShiftId]);
-  // Copy template tasks
-  const template = (await pool.query(
-    "SELECT task_id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
-    [Number(shiftId)]
-  )).rows;
-  for (const t of template) {
+router.post("/shifts/:shiftId/day/:date/add", async (req, res) => {
+  const shiftId = Number(req.params.shiftId);
+  const { date } = req.params;
+  const name = (req.body.name as string)?.trim();
+  if (name) {
+    // If the override doesn't exist yet, materialize it as a copy of the
+    // standing list first (same as "Customize this day"), then append.
+    const existing = (await pool.query(
+      "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
+      [date, shiftId]
+    )).rows[0];
+    let dailyShiftId: number;
+    if (existing) {
+      dailyShiftId = existing.id;
+    } else {
+      const created = await pool.query(
+        `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, true)
+         RETURNING id`,
+        [date, shiftId]
+      );
+      dailyShiftId = created.rows[0].id;
+      const template = (await pool.query(
+        "SELECT task_id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
+        [shiftId]
+      )).rows;
+      for (const t of template) {
+        await pool.query(
+          `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
+           ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
+          [dailyShiftId, t.task_id, t.display_order]
+        );
+      }
+    }
+    const taskId = await upsertTaskByName(name);
+    const maxOrder = (await pool.query(
+      "SELECT COALESCE(MAX(display_order), -1) as max FROM daily_shift_tasks WHERE daily_shift_id = $1",
+      [dailyShiftId]
+    )).rows[0].max;
     await pool.query(
       `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
        ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
-      [dailyShiftId, t.task_id, t.display_order]
+      [dailyShiftId, taskId, maxOrder + 1]
     );
   }
-  res.redirect(`/admin/schedule?date=${date}`);
+  res.redirect(hubUrl(shiftId, date));
 });
 
-router.post("/schedule/:date/:shiftId/add-task", async (req, res) => {
-  const { date, shiftId } = req.params;
-  const taskId = Number(req.body.taskId);
-  // Ensure daily shift exists
-  const dsResult = await pool.query(
-    `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, false)
-     ON CONFLICT (date, shift_id) DO NOTHING RETURNING id`,
-    [date, Number(shiftId)]
-  );
-  let dailyShiftId: number;
-  if (dsResult.rows[0]) {
-    dailyShiftId = dsResult.rows[0].id;
-  } else {
-    const existing = await pool.query(
-      "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
-      [date, Number(shiftId)]
-    );
-    dailyShiftId = existing.rows[0].id;
-  }
-  const maxOrder = (await pool.query(
-    "SELECT COALESCE(MAX(display_order), -1) as max FROM daily_shift_tasks WHERE daily_shift_id = $1",
-    [dailyShiftId]
-  )).rows[0].max;
-  await pool.query(
-    `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
-     ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
-    [dailyShiftId, taskId, maxOrder + 1]
-  );
-  res.redirect(`/admin/schedule?date=${date}`);
-});
-
-router.post("/schedule/:date/:shiftId/remove-task/:id", async (req, res) => {
+router.post("/shifts/:shiftId/day/:date/remove/:id", async (req, res) => {
   await pool.query("DELETE FROM daily_shift_tasks WHERE id = $1", [Number(req.params.id)]);
-  res.redirect(`/admin/schedule?date=${req.params.date}`);
+  res.redirect(hubUrl(req.params.shiftId, req.params.date));
 });
 
-router.post("/schedule/:date/:shiftId/move-task/:id", async (req, res) => {
+router.post("/shifts/:shiftId/day/:date/move/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const dailyShiftId = Number(req.params.shiftId);
+  const { shiftId, date } = req.params;
   const direction = req.body.direction as "up" | "down";
+  const ds = (await pool.query(
+    "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
+    [date, Number(shiftId)]
+  )).rows[0];
+  if (!ds) return void res.redirect(hubUrl(shiftId, date));
   const rows = (await pool.query(
     "SELECT id, display_order FROM daily_shift_tasks WHERE daily_shift_id = $1 ORDER BY display_order",
-    [dailyShiftId]
+    [ds.id]
   )).rows;
   const idx = rows.findIndex((r: { id: number }) => r.id === id);
-  if (idx === -1) return void res.redirect(`/admin/schedule?date=${req.params.date}`);
+  if (idx === -1) return void res.redirect(hubUrl(shiftId, date));
   const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= rows.length) return void res.redirect(`/admin/schedule?date=${req.params.date}`);
-  const currentOrder = rows[idx].display_order;
-  const swapOrder = rows[swapIdx].display_order;
-  await pool.query("UPDATE daily_shift_tasks SET display_order = $1 WHERE id = $2", [swapOrder, rows[idx].id]);
-  await pool.query("UPDATE daily_shift_tasks SET display_order = $1 WHERE id = $2", [currentOrder, rows[swapIdx].id]);
-  res.redirect(`/admin/schedule?date=${req.params.date}`);
+  if (swapIdx < 0 || swapIdx >= rows.length) return void res.redirect(hubUrl(shiftId, date));
+  await pool.query("UPDATE daily_shift_tasks SET display_order = $1 WHERE id = $2", [rows[swapIdx].display_order, rows[idx].id]);
+  await pool.query("UPDATE daily_shift_tasks SET display_order = $1 WHERE id = $2", [rows[idx].display_order, rows[swapIdx].id]);
+  res.redirect(hubUrl(shiftId, date));
+});
+
+// Revert the day back to the standing list (removes the override entirely).
+router.post("/shifts/:shiftId/day/:date/revert", async (req, res) => {
+  const { shiftId, date } = req.params;
+  await pool.query(
+    "DELETE FROM daily_shifts WHERE date = $1 AND shift_id = $2",
+    [date, Number(shiftId)]
+  );
+  res.redirect(hubUrl(shiftId, date));
 });
 
 // ════════════════════════════════════ Reports ═════════════════════════════════

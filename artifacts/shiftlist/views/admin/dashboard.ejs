@@ -20,16 +20,16 @@
         <div style="font-size:0.85rem; color:var(--muted);">Staff</div>
       </div>
       <div class="panel" style="text-align:center;">
-        <div style="font-size:2rem; font-weight:800; color:var(--brand);"><%= taskCount %></div>
-        <div style="font-size:0.85rem; color:var(--muted);">Tasks</div>
-      </div>
-      <div class="panel" style="text-align:center;">
         <div style="font-size:2rem; font-weight:800; color:var(--brand);"><%= shiftCount %></div>
         <div style="font-size:0.85rem; color:var(--muted);">Shifts</div>
       </div>
       <div class="panel" style="text-align:center;">
-        <div style="font-size:2rem; font-weight:800; color:var(--success);"><%= publishedCount %></div>
-        <div style="font-size:0.85rem; color:var(--muted);">Published today</div>
+        <div style="font-size:2rem; font-weight:800; color:var(--brand);"><%= taskCount %></div>
+        <div style="font-size:0.85rem; color:var(--muted);">Tasks</div>
+      </div>
+      <div class="panel" style="text-align:center;">
+        <div style="font-size:2rem; font-weight:800; color:#f59e0b;"><%= customCount %></div>
+        <div style="font-size:0.85rem; color:var(--muted);">Custom days</div>
       </div>
     </div>
 
@@ -38,8 +38,8 @@
         <h2 style="font-size:1rem;">Quick Links</h2>
       </div>
       <div style="display:flex; flex-direction:column; gap:8px;">
-        <a href="/admin/schedule?date=<%= today %>" class="btn btn-primary btn-full">Schedule Today</a>
-        <a href="/admin/shifts" class="btn btn-ghost btn-full">Edit Shift Templates</a>
+        <a href="/admin/shifts" class="btn btn-primary btn-full">Build Shift Checklists</a>
+        <a href="/admin/employees" class="btn btn-ghost btn-full">Manage Staff</a>
         <a href="/admin/reports" class="btn btn-ghost btn-full">View Reports</a>
       </div>
     </div>
