@@ -171,6 +171,26 @@
     }
 
     (function () {
+      // ── Unsaved-edit guard ───────────────────────────────────────────────────
+      var dirtyField = null;
+
+      function markDirty(span) {
+        dirtyField = span;
+        span.classList.add('task-edit-name--dirty');
+      }
+
+      function clearDirty(span) {
+        if (dirtyField === span) dirtyField = null;
+        span.classList.remove('task-edit-name--dirty');
+      }
+
+      window.addEventListener('beforeunload', function (e) {
+        if (dirtyField) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      });
+
       // ── Feedback helpers ─────────────────────────────────────────────────────
       var toastTimer = null;
       function showToast(msg, isError) {
@@ -235,24 +255,28 @@
           sel.addRange(range);
         });
 
+        span.addEventListener('input', function () {
+          markDirty(span);
+        });
+
         span.addEventListener('blur', function () {
           if (row) row.setAttribute('draggable', 'true');
           var val = span.textContent.trim();
-          if (!val) { span.textContent = original; return; }
-          if (val === original) return;
+          if (!val) { span.textContent = original; clearDirty(span); return; }
+          if (val === original) { clearDirty(span); return; }
           fetch(span.dataset.renameUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: val }),
           }).then(function (r) {
-            if (r.ok) { original = val; flashRow(row); }
-            else { span.textContent = original; showToast('Failed to rename — try again', true); }
-          }).catch(function () { span.textContent = original; showToast('Failed to rename — check your connection', true); });
+            if (r.ok) { original = val; clearDirty(span); flashRow(row); }
+            else { span.textContent = original; clearDirty(span); showToast('Failed to rename — try again', true); }
+          }).catch(function () { span.textContent = original; clearDirty(span); showToast('Failed to rename — check your connection', true); });
         });
 
         span.addEventListener('keydown', function (e) {
           if (e.key === 'Enter') { e.preventDefault(); span.blur(); }
-          if (e.key === 'Escape') { span.textContent = original; span.blur(); }
+          if (e.key === 'Escape') { span.textContent = original; clearDirty(span); span.blur(); }
         });
 
         span.addEventListener('paste', function (e) {

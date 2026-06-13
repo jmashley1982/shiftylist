@@ -766,6 +766,12 @@ tbody tr:hover { background: rgba(56,182,160,.04); }
   cursor: text;
 }
 
+.task-edit-name--dirty {
+  box-shadow: 0 0 0 2px rgba(251,191,36,.55);
+  background: rgba(251,191,36,.07);
+  outline: none;
+}
+
 .task-edit-name:not(:focus):hover { background: rgba(255,255,255,.04); }
 
 /* ── Save-feedback animations ─────────────────────────────────────────────── */
