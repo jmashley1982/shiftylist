@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { PoolClient } from "pg";
 import { pool } from "../db/index.js";
 import { ensureAdminAuth } from "../middleware/auth.js";
 import { getTodayStr, formatDateDisplay } from "../utils/dateHelpers.js";
@@ -14,9 +15,25 @@ function getOffsetDate(dateStr: string, days: number): string {
   return d.toISOString().split("T")[0];
 }
 
+/** Run fn inside a BEGIN/COMMIT transaction; rolls back on error. */
+async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 /** Create the task by name if new, otherwise reuse the existing one. Returns its id. */
-async function upsertTaskByName(name: string): Promise<number> {
-  const res = await pool.query(
+async function upsertTaskByName(client: PoolClient, name: string): Promise<number> {
+  const res = await client.query(
     `INSERT INTO tasks (name) VALUES ($1)
      ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
      RETURNING id`,
@@ -29,6 +46,31 @@ async function upsertTaskByName(name: string): Promise<number> {
 function hubUrl(shiftId: number | string, date?: string): string {
   const base = `/admin/shifts?shift=${shiftId}`;
   return date ? `${base}&date=${date}` : base;
+}
+
+/**
+ * Renormalize a list of task rows to display_order 0, 1, 2, … in a single
+ * UPDATE … FROM (VALUES …) statement. A single-statement update allows
+ * PostgreSQL to resolve temporary intra-statement uniqueness conflicts, so
+ * the (shift_id/daily_shift_id, display_order) unique constraint is never
+ * violated even during a reorder.
+ */
+async function bulkRenormalizeOrder(
+  client: PoolClient,
+  table: "shift_tasks" | "daily_shift_tasks",
+  ids: number[]
+): Promise<void> {
+  if (ids.length === 0) return;
+  // Build: VALUES ($1::int, $2::int), ($3::int, $4::int), …
+  const valuePlaceholders = ids.map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`).join(", ");
+  const params: number[] = ids.flatMap((id, i) => [id, i]);
+  await client.query(
+    `UPDATE ${table} AS t
+     SET display_order = vals.new_order
+     FROM (VALUES ${valuePlaceholders}) AS vals(row_id, new_order)
+     WHERE t.id = vals.row_id`,
+    params
+  );
 }
 
 // ════════════════════════════════════ Dashboard ═════════════════════════════════
@@ -164,16 +206,23 @@ router.post("/shifts/:shiftId/standing/add", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
   const name = (req.body.name as string)?.trim();
   if (name) {
-    const taskId = await upsertTaskByName(name);
-    const maxOrder = (await pool.query(
-      "SELECT COALESCE(MAX(display_order), -1) as max FROM shift_tasks WHERE shift_id = $1",
-      [shiftId]
-    )).rows[0].max;
-    await pool.query(
-      `INSERT INTO shift_tasks (shift_id, task_id, display_order) VALUES ($1, $2, $3)
-       ON CONFLICT (shift_id, task_id) DO NOTHING`,
-      [shiftId, taskId, maxOrder + 1]
-    );
+    await withTransaction(async (client) => {
+      // Lock the parent shift row first. This serializes all concurrent adds
+      // to the same shift so only one transaction can compute MAX(display_order)
+      // at a time, preventing duplicate order values.
+      await client.query("SELECT id FROM shifts WHERE id = $1 FOR UPDATE", [shiftId]);
+
+      const taskId = await upsertTaskByName(client, name);
+      const maxRow = (await client.query(
+        "SELECT COALESCE(MAX(display_order), -1) as max FROM shift_tasks WHERE shift_id = $1",
+        [shiftId]
+      )).rows[0];
+      await client.query(
+        `INSERT INTO shift_tasks (shift_id, task_id, display_order) VALUES ($1, $2, $3)
+         ON CONFLICT (shift_id, task_id) DO NOTHING`,
+        [shiftId, taskId, (maxRow.max as number) + 1]
+      );
+    });
   }
   res.redirect(hubUrl(shiftId));
 });
@@ -187,16 +236,27 @@ router.post("/shifts/:shiftId/standing/move/:id", async (req, res) => {
   const id = Number(req.params.id);
   const shiftId = Number(req.params.shiftId);
   const direction = req.body.direction as "up" | "down";
-  const rows = (await pool.query(
-    "SELECT id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
-    [shiftId]
-  )).rows;
-  const idx = rows.findIndex((r: { id: number }) => r.id === id);
-  if (idx === -1) return void res.redirect(hubUrl(shiftId));
-  const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= rows.length) return void res.redirect(hubUrl(shiftId));
-  await pool.query("UPDATE shift_tasks SET display_order = $1 WHERE id = $2", [rows[swapIdx].display_order, rows[idx].id]);
-  await pool.query("UPDATE shift_tasks SET display_order = $1 WHERE id = $2", [rows[idx].display_order, rows[swapIdx].id]);
+
+  await withTransaction(async (client) => {
+    // Lock all rows for this shift so concurrent moves can't interleave.
+    const rows = (await client.query(
+      "SELECT id FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order FOR UPDATE",
+      [shiftId]
+    )).rows as { id: number }[];
+
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= rows.length) return;
+
+    [rows[idx], rows[swapIdx]] = [rows[swapIdx], rows[idx]];
+
+    // Single UPDATE … FROM (VALUES …) statement renormalizes all orders 0,1,2,…
+    // A single statement lets PostgreSQL resolve intra-statement uniqueness
+    // conflicts, so the (shift_id, display_order) unique constraint is safe.
+    await bulkRenormalizeOrder(client, "shift_tasks", rows.map((r) => r.id));
+  });
+
   res.redirect(hubUrl(shiftId));
 });
 
@@ -205,29 +265,35 @@ router.post("/shifts/:shiftId/standing/move/:id", async (req, res) => {
 router.post("/shifts/:shiftId/day/:date/customize", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
   const { date } = req.params;
-  const ds = await pool.query(
-    `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, true)
-     ON CONFLICT (date, shift_id) DO UPDATE SET is_published = true RETURNING id`,
-    [date, shiftId]
-  );
-  const dailyShiftId = ds.rows[0].id;
-  const existing = (await pool.query(
-    "SELECT COUNT(*) as count FROM daily_shift_tasks WHERE daily_shift_id = $1",
-    [dailyShiftId]
-  )).rows[0].count;
-  if (Number(existing) === 0) {
-    const template = (await pool.query(
-      "SELECT task_id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
-      [shiftId]
-    )).rows;
-    for (const t of template) {
-      await pool.query(
-        `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
-         ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
-        [dailyShiftId, t.task_id, t.display_order]
-      );
+
+  await withTransaction(async (client) => {
+    const ds = await client.query(
+      `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, true)
+       ON CONFLICT (date, shift_id) DO UPDATE SET is_published = true RETURNING id`,
+      [date, shiftId]
+    );
+    const dailyShiftId = ds.rows[0].id as number;
+
+    const existing = (await client.query(
+      "SELECT COUNT(*) as count FROM daily_shift_tasks WHERE daily_shift_id = $1",
+      [dailyShiftId]
+    )).rows[0].count;
+
+    if (Number(existing) === 0) {
+      const template = (await client.query(
+        "SELECT task_id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
+        [shiftId]
+      )).rows;
+      for (const t of template) {
+        await client.query(
+          `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
+           ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
+          [dailyShiftId, t.task_id, t.display_order]
+        );
+      }
     }
-  }
+  });
+
   res.redirect(hubUrl(shiftId, date));
 });
 
@@ -235,46 +301,58 @@ router.post("/shifts/:shiftId/day/:date/add", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
   const { date } = req.params;
   const name = (req.body.name as string)?.trim();
+
   if (name) {
-    // If the override doesn't exist yet, materialize it as a copy of the
-    // standing list first (same as "Customize this day"), then append.
-    const existing = (await pool.query(
-      "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
-      [date, shiftId]
-    )).rows[0];
-    let dailyShiftId: number;
-    if (existing) {
-      dailyShiftId = existing.id;
-    } else {
-      const created = await pool.query(
-        `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, true)
-         RETURNING id`,
+    await withTransaction(async (client) => {
+      // Lock the parent shift row so that concurrent "add to same shift/day"
+      // requests are serialized. This prevents two transactions from both
+      // materializing the day override simultaneously, and from reading the
+      // same MAX(display_order) before either has committed.
+      await client.query("SELECT id FROM shifts WHERE id = $1 FOR UPDATE", [shiftId]);
+
+      // If no override exists yet, materialize one as a copy of the standing list.
+      const existing = (await client.query(
+        "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
         [date, shiftId]
-      );
-      dailyShiftId = created.rows[0].id;
-      const template = (await pool.query(
-        "SELECT task_id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
-        [shiftId]
-      )).rows;
-      for (const t of template) {
-        await pool.query(
-          `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
-           ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
-          [dailyShiftId, t.task_id, t.display_order]
+      )).rows[0] as { id: number } | undefined;
+
+      let dailyShiftId: number;
+      if (existing) {
+        dailyShiftId = existing.id;
+      } else {
+        const created = await client.query(
+          `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, true)
+           ON CONFLICT (date, shift_id) DO UPDATE SET is_published = true RETURNING id`,
+          [date, shiftId]
         );
+        dailyShiftId = created.rows[0].id as number;
+
+        const template = (await client.query(
+          "SELECT task_id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
+          [shiftId]
+        )).rows;
+        for (const t of template) {
+          await client.query(
+            `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
+             ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
+            [dailyShiftId, t.task_id, t.display_order]
+          );
+        }
       }
-    }
-    const taskId = await upsertTaskByName(name);
-    const maxOrder = (await pool.query(
-      "SELECT COALESCE(MAX(display_order), -1) as max FROM daily_shift_tasks WHERE daily_shift_id = $1",
-      [dailyShiftId]
-    )).rows[0].max;
-    await pool.query(
-      `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
-       ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
-      [dailyShiftId, taskId, maxOrder + 1]
-    );
+
+      const taskId = await upsertTaskByName(client, name);
+      const maxRow = (await client.query(
+        "SELECT COALESCE(MAX(display_order), -1) as max FROM daily_shift_tasks WHERE daily_shift_id = $1",
+        [dailyShiftId]
+      )).rows[0];
+      await client.query(
+        `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
+         ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
+        [dailyShiftId, taskId, (maxRow.max as number) + 1]
+      );
+    });
   }
+
   res.redirect(hubUrl(shiftId, date));
 });
 
@@ -287,21 +365,32 @@ router.post("/shifts/:shiftId/day/:date/move/:id", async (req, res) => {
   const id = Number(req.params.id);
   const { shiftId, date } = req.params;
   const direction = req.body.direction as "up" | "down";
-  const ds = (await pool.query(
-    "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
-    [date, Number(shiftId)]
-  )).rows[0];
-  if (!ds) return void res.redirect(hubUrl(shiftId, date));
-  const rows = (await pool.query(
-    "SELECT id, display_order FROM daily_shift_tasks WHERE daily_shift_id = $1 ORDER BY display_order",
-    [ds.id]
-  )).rows;
-  const idx = rows.findIndex((r: { id: number }) => r.id === id);
-  if (idx === -1) return void res.redirect(hubUrl(shiftId, date));
-  const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= rows.length) return void res.redirect(hubUrl(shiftId, date));
-  await pool.query("UPDATE daily_shift_tasks SET display_order = $1 WHERE id = $2", [rows[swapIdx].display_order, rows[idx].id]);
-  await pool.query("UPDATE daily_shift_tasks SET display_order = $1 WHERE id = $2", [rows[idx].display_order, rows[swapIdx].id]);
+
+  await withTransaction(async (client) => {
+    const ds = (await client.query(
+      "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
+      [date, Number(shiftId)]
+    )).rows[0] as { id: number } | undefined;
+    if (!ds) return;
+
+    // Lock all rows for this daily shift so concurrent moves can't interleave.
+    const rows = (await client.query(
+      "SELECT id FROM daily_shift_tasks WHERE daily_shift_id = $1 ORDER BY display_order FOR UPDATE",
+      [ds.id]
+    )).rows as { id: number }[];
+
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= rows.length) return;
+
+    [rows[idx], rows[swapIdx]] = [rows[swapIdx], rows[idx]];
+
+    // Single UPDATE … FROM (VALUES …) statement — same intra-statement
+    // uniqueness safety as the standing move handler.
+    await bulkRenormalizeOrder(client, "daily_shift_tasks", rows.map((r) => r.id));
+  });
+
   res.redirect(hubUrl(shiftId, date));
 });
 

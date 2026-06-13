@@ -66,6 +66,7 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 - Admin code defaults to `1234` if `ADMIN_CODE` env var is not set.
 - Database schema changes are managed via Drizzle. After schema changes, run `pnpm --filter @workspace/db run push` to update the dev DB.
 - The dev database is separate from production — when you publish, Replit will sync the schema to production.
+- Two unique indexes (`shift_tasks_shift_id_display_order_idx` and `daily_shift_tasks_daily_shift_id_display_order_idx`) were applied directly via SQL (not through Drizzle). If you re-provision the production DB, re-apply them: `CREATE UNIQUE INDEX IF NOT EXISTS shift_tasks_shift_id_display_order_idx ON shift_tasks (shift_id, display_order); CREATE UNIQUE INDEX IF NOT EXISTS daily_shift_tasks_daily_shift_id_display_order_idx ON daily_shift_tasks (daily_shift_id, display_order);`
 
 ## Environment secrets required
 
