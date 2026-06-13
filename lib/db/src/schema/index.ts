@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, date, boolean, unique, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, unique, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 export const employees = pgTable("employees", {
@@ -38,29 +38,16 @@ export const shiftTasks = pgTable("shift_tasks", {
 
 export const insertShiftTaskSchema = createInsertSchema(shiftTasks).omit({ id: true });
 
-// A shift scheduled for a specific day (with publish toggle)
-export const dailyShifts = pgTable("daily_shifts", {
+// Extra tasks added for a specific date + shift (additive only, do not replace the standing list)
+export const extraDayTasks = pgTable("extra_day_tasks", {
   id: serial("id").primaryKey(),
-  date: text("date").notNull(),
   shiftId: integer("shift_id").notNull().references(() => shifts.id, { onDelete: "cascade" }),
-  isPublished: boolean("is_published").default(false).notNull(),
-}, (table) => [
-  unique().on(table.date, table.shiftId),
-]);
-
-export const insertDailyShiftSchema = createInsertSchema(dailyShifts).omit({ id: true });
-
-// Individual tasks for a specific day/shift (ordered, can differ from shift template)
-export const dailyShiftTasks = pgTable("daily_shift_tasks", {
-  id: serial("id").primaryKey(),
-  dailyShiftId: integer("daily_shift_id").notNull().references(() => dailyShifts.id, { onDelete: "cascade" }),
-  taskId: integer("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
+  taskName: text("task_name").notNull(),
   displayOrder: integer("display_order").default(0).notNull(),
-}, (table) => [
-  unique().on(table.dailyShiftId, table.taskId),
-]);
+});
 
-export const insertDailyShiftTaskSchema = createInsertSchema(dailyShiftTasks).omit({ id: true });
+export const insertExtraDayTaskSchema = createInsertSchema(extraDayTasks).omit({ id: true });
 
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = typeof employees.$inferInsert;
@@ -74,8 +61,5 @@ export type InsertShift = typeof shifts.$inferInsert;
 export type ShiftTask = typeof shiftTasks.$inferSelect;
 export type InsertShiftTask = typeof shiftTasks.$inferInsert;
 
-export type DailyShift = typeof dailyShifts.$inferSelect;
-export type InsertDailyShift = typeof dailyShifts.$inferInsert;
-
-export type DailyShiftTask = typeof dailyShiftTasks.$inferSelect;
-export type InsertDailyShiftTask = typeof dailyShiftTasks.$inferInsert;
+export type ExtraDayTask = typeof extraDayTasks.$inferSelect;
+export type InsertExtraDayTask = typeof extraDayTasks.$inferInsert;

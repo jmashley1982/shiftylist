@@ -57,11 +57,10 @@ function hubUrl(shiftId: number | string, date?: string): string {
  */
 async function bulkRenormalizeOrder(
   client: PoolClient,
-  table: "shift_tasks" | "daily_shift_tasks",
+  table: "shift_tasks",
   ids: number[]
 ): Promise<void> {
   if (ids.length === 0) return;
-  // Build: VALUES ($1::int, $2::int), ($3::int, $4::int), …
   const valuePlaceholders = ids.map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`).join(", ");
   const params: number[] = ids.flatMap((id, i) => [id, i]);
   await client.query(
@@ -79,11 +78,11 @@ router.get("/dashboard", async (_req, res) => {
   const shiftCount = (await pool.query("SELECT COUNT(*) as count FROM shifts")).rows[0].count;
   const taskCount = (await pool.query("SELECT COUNT(*) as count FROM tasks")).rows[0].count;
   const today = getTodayStr();
-  const customCount = (await pool.query(
-    "SELECT COUNT(*) as count FROM daily_shifts WHERE date >= $1",
+  const extraCount = (await pool.query(
+    "SELECT COUNT(*) as count FROM extra_day_tasks WHERE date >= $1",
     [today]
   )).rows[0].count;
-  res.render("admin/dashboard", { employeeCount: empCount, shiftCount, taskCount, customCount, today });
+  res.render("admin/dashboard", { employeeCount: empCount, shiftCount, taskCount, customCount: extraCount, today });
 });
 
 // ════════════════════════════════════ Employees ════════════════════════════════
@@ -115,7 +114,7 @@ router.post("/employees/delete/:id", async (req, res) => {
 
 // ════════════════════════════════════ Shifts hub ════════════════════════════════
 // One screen to build a shift's standing checklist (always live) and optionally
-// tweak a single day. Picks shift via ?shift= and day mode via ?date=.
+// add extra tasks for a specific day.
 router.get("/shifts", async (req, res) => {
   const shifts = (await pool.query("SELECT * FROM shifts ORDER BY id")).rows;
 
@@ -139,31 +138,20 @@ router.get("/shifts", async (req, res) => {
     )).rows;
   }
 
-  // Day mode (optional): editing a single date's override.
+  // Day mode (optional): adding extra tasks for a specific date.
   const rawDate = req.query.date as string | undefined;
   const dayMode = !!rawDate;
   const date = rawDate || getTodayStr();
-  let hasOverride = false;
-  let dayTasks: { id: number; task_name: string; display_order: number }[] = [];
-  let dailyShiftId: number | null = null;
+  let extraTasks: { id: number; task_name: string; display_order: number }[] = [];
 
   if (selectedShift && dayMode) {
-    const ds = (await pool.query(
-      "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
-      [date, selectedShift.id]
-    )).rows[0];
-    if (ds) {
-      hasOverride = true;
-      dailyShiftId = ds.id;
-      dayTasks = (await pool.query(
-        `SELECT dst.id, dst.display_order, t.name as task_name
-         FROM daily_shift_tasks dst
-         JOIN tasks t ON t.id = dst.task_id
-         WHERE dst.daily_shift_id = $1
-         ORDER BY dst.display_order`,
-        [ds.id]
-      )).rows;
-    }
+    extraTasks = (await pool.query(
+      `SELECT id, task_name, display_order
+       FROM extra_day_tasks
+       WHERE shift_id = $1 AND date = $2
+       ORDER BY display_order`,
+      [selectedShift.id, date]
+    )).rows;
   }
 
   res.render("admin/shifts", {
@@ -176,9 +164,7 @@ router.get("/shifts", async (req, res) => {
     today: getTodayStr(),
     prevDate: getOffsetDate(date, -1),
     nextDate: getOffsetDate(date, 1),
-    hasOverride,
-    dayTasks,
-    dailyShiftId,
+    extraTasks,
     formatDateDisplay,
   });
 });
@@ -207,9 +193,6 @@ router.post("/shifts/:shiftId/standing/add", async (req, res) => {
   const name = (req.body.name as string)?.trim();
   if (name) {
     await withTransaction(async (client) => {
-      // Lock the parent shift row first. This serializes all concurrent adds
-      // to the same shift so only one transaction can compute MAX(display_order)
-      // at a time, preventing duplicate order values.
       await client.query("SELECT id FROM shifts WHERE id = $1 FOR UPDATE", [shiftId]);
 
       const taskId = await upsertTaskByName(client, name);
@@ -265,7 +248,6 @@ router.post("/shifts/:shiftId/standing/move/:id", async (req, res) => {
   const direction = req.body.direction as "up" | "down";
 
   await withTransaction(async (client) => {
-    // Lock all rows for this shift so concurrent moves can't interleave.
     const rows = (await client.query(
       "SELECT id FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order FOR UPDATE",
       [shiftId]
@@ -278,183 +260,35 @@ router.post("/shifts/:shiftId/standing/move/:id", async (req, res) => {
 
     [rows[idx], rows[swapIdx]] = [rows[swapIdx], rows[idx]];
 
-    // Single UPDATE … FROM (VALUES …) statement renormalizes all orders 0,1,2,…
-    // A single statement lets PostgreSQL resolve intra-statement uniqueness
-    // conflicts, so the (shift_id, display_order) unique constraint is safe.
     await bulkRenormalizeOrder(client, "shift_tasks", rows.map((r) => r.id));
   });
 
   res.redirect(hubUrl(shiftId));
 });
 
-// ── Single-day override ──────────────────────────────────────────────────────
-// Materialize a day override as a copy of the standing list.
-router.post("/shifts/:shiftId/day/:date/customize", async (req, res) => {
-  const shiftId = Number(req.params.shiftId);
-  const { date } = req.params;
-
-  await withTransaction(async (client) => {
-    const ds = await client.query(
-      `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, true)
-       ON CONFLICT (date, shift_id) DO UPDATE SET is_published = true RETURNING id`,
-      [date, shiftId]
-    );
-    const dailyShiftId = ds.rows[0].id as number;
-
-    const existing = (await client.query(
-      "SELECT COUNT(*) as count FROM daily_shift_tasks WHERE daily_shift_id = $1",
-      [dailyShiftId]
-    )).rows[0].count;
-
-    if (Number(existing) === 0) {
-      const template = (await client.query(
-        "SELECT task_id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
-        [shiftId]
-      )).rows;
-      for (const t of template) {
-        await client.query(
-          `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
-           ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
-          [dailyShiftId, t.task_id, t.display_order]
-        );
-      }
-    }
-  });
-
-  res.redirect(hubUrl(shiftId, date));
-});
-
-router.post("/shifts/:shiftId/day/:date/add", async (req, res) => {
+// ── Extra tasks for a specific day ──────────────────────────────────────────
+router.post("/shifts/:shiftId/day/:date/add-extra", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
   const { date } = req.params;
   const name = (req.body.name as string)?.trim();
 
   if (name) {
-    await withTransaction(async (client) => {
-      // Lock the parent shift row so that concurrent "add to same shift/day"
-      // requests are serialized. This prevents two transactions from both
-      // materializing the day override simultaneously, and from reading the
-      // same MAX(display_order) before either has committed.
-      await client.query("SELECT id FROM shifts WHERE id = $1 FOR UPDATE", [shiftId]);
-
-      // If no override exists yet, materialize one as a copy of the standing list.
-      const existing = (await client.query(
-        "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
-        [date, shiftId]
-      )).rows[0] as { id: number } | undefined;
-
-      let dailyShiftId: number;
-      if (existing) {
-        dailyShiftId = existing.id;
-      } else {
-        const created = await client.query(
-          `INSERT INTO daily_shifts (date, shift_id, is_published) VALUES ($1, $2, true)
-           ON CONFLICT (date, shift_id) DO UPDATE SET is_published = true RETURNING id`,
-          [date, shiftId]
-        );
-        dailyShiftId = created.rows[0].id as number;
-
-        const template = (await client.query(
-          "SELECT task_id, display_order FROM shift_tasks WHERE shift_id = $1 ORDER BY display_order",
-          [shiftId]
-        )).rows;
-        for (const t of template) {
-          await client.query(
-            `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
-             ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
-            [dailyShiftId, t.task_id, t.display_order]
-          );
-        }
-      }
-
-      const taskId = await upsertTaskByName(client, name);
-      const maxRow = (await client.query(
-        "SELECT COALESCE(MAX(display_order), -1) as max FROM daily_shift_tasks WHERE daily_shift_id = $1",
-        [dailyShiftId]
-      )).rows[0];
-      await client.query(
-        `INSERT INTO daily_shift_tasks (daily_shift_id, task_id, display_order) VALUES ($1, $2, $3)
-         ON CONFLICT (daily_shift_id, task_id) DO NOTHING`,
-        [dailyShiftId, taskId, (maxRow.max as number) + 1]
-      );
-    });
+    const maxRow = (await pool.query(
+      "SELECT COALESCE(MAX(display_order), -1) as max FROM extra_day_tasks WHERE shift_id = $1 AND date = $2",
+      [shiftId, date]
+    )).rows[0];
+    await pool.query(
+      "INSERT INTO extra_day_tasks (shift_id, date, task_name, display_order) VALUES ($1, $2, $3, $4)",
+      [shiftId, date, name, (maxRow.max as number) + 1]
+    );
   }
 
   res.redirect(hubUrl(shiftId, date));
 });
 
-router.post("/shifts/:shiftId/day/:date/remove/:id", async (req, res) => {
-  await pool.query("DELETE FROM daily_shift_tasks WHERE id = $1", [Number(req.params.id)]);
+router.post("/shifts/:shiftId/day/:date/remove-extra/:id", async (req, res) => {
+  await pool.query("DELETE FROM extra_day_tasks WHERE id = $1", [Number(req.params.id)]);
   res.redirect(hubUrl(req.params.shiftId, req.params.date));
-});
-
-router.post("/shifts/:shiftId/day/:date/rename/:id", async (req, res) => {
-  const dailyShiftTaskId = Number(req.params.id);
-  const name = (req.body.name as string)?.trim();
-  if (!name) return void res.json({ ok: false, error: "Name required" });
-  await withTransaction(async (client) => {
-    const taskId = await upsertTaskByName(client, name);
-    await client.query(
-      "UPDATE daily_shift_tasks SET task_id = $1 WHERE id = $2",
-      [taskId, dailyShiftTaskId]
-    );
-  });
-  res.json({ ok: true });
-});
-
-router.post("/shifts/:shiftId/day/:date/reorder", async (req, res) => {
-  const shiftId = Number(req.params.shiftId);
-  const ids = (req.body.ids as unknown[]);
-  if (!Array.isArray(ids) || ids.length === 0) return void res.json({ ok: false });
-  const idArray = ids.map(Number).filter(n => n > 0);
-  await withTransaction(async (client) => {
-    await client.query("SELECT id FROM shifts WHERE id = $1 FOR UPDATE", [shiftId]);
-    await bulkRenormalizeOrder(client, "daily_shift_tasks", idArray);
-  });
-  res.json({ ok: true });
-});
-
-router.post("/shifts/:shiftId/day/:date/move/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  const { shiftId, date } = req.params;
-  const direction = req.body.direction as "up" | "down";
-
-  await withTransaction(async (client) => {
-    const ds = (await client.query(
-      "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
-      [date, Number(shiftId)]
-    )).rows[0] as { id: number } | undefined;
-    if (!ds) return;
-
-    // Lock all rows for this daily shift so concurrent moves can't interleave.
-    const rows = (await client.query(
-      "SELECT id FROM daily_shift_tasks WHERE daily_shift_id = $1 ORDER BY display_order FOR UPDATE",
-      [ds.id]
-    )).rows as { id: number }[];
-
-    const idx = rows.findIndex((r) => r.id === id);
-    if (idx === -1) return;
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= rows.length) return;
-
-    [rows[idx], rows[swapIdx]] = [rows[swapIdx], rows[idx]];
-
-    // Single UPDATE … FROM (VALUES …) statement — same intra-statement
-    // uniqueness safety as the standing move handler.
-    await bulkRenormalizeOrder(client, "daily_shift_tasks", rows.map((r) => r.id));
-  });
-
-  res.redirect(hubUrl(shiftId, date));
-});
-
-// Revert the day back to the standing list (removes the override entirely).
-router.post("/shifts/:shiftId/day/:date/revert", async (req, res) => {
-  const { shiftId, date } = req.params;
-  await pool.query(
-    "DELETE FROM daily_shifts WHERE date = $1 AND shift_id = $2",
-    [date, Number(shiftId)]
-  );
-  res.redirect(hubUrl(shiftId, date));
 });
 
 // ════════════════════════════════════ Reports ═════════════════════════════════

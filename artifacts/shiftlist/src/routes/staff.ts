@@ -16,33 +16,26 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
     return void res.redirect("/select-shift");
   }
 
-  // A single-day override takes precedence over the always-live standing list.
-  const dailyShift = (await pool.query(
-    "SELECT id FROM daily_shifts WHERE date = $1 AND shift_id = $2",
-    [today, shiftId]
-  )).rows[0];
+  // Always load the standing checklist for this shift.
+  const standingRows = (await pool.query(`
+    SELECT t.name as task_name
+    FROM shift_tasks st
+    JOIN tasks t ON t.id = st.task_id
+    WHERE st.shift_id = $1
+    ORDER BY st.display_order
+  `, [shiftId])).rows as { task_name: string }[];
 
-  let taskRows: { task_name: string }[];
-  if (dailyShift) {
-    taskRows = (await pool.query(`
-      SELECT t.name as task_name
-      FROM daily_shift_tasks dst
-      JOIN tasks t ON t.id = dst.task_id
-      WHERE dst.daily_shift_id = $1
-      ORDER BY dst.display_order
-    `, [dailyShift.id])).rows;
-  } else {
-    // No override → use the shift's standing checklist.
-    taskRows = (await pool.query(`
-      SELECT t.name as task_name
-      FROM shift_tasks st
-      JOIN tasks t ON t.id = st.task_id
-      WHERE st.shift_id = $1
-      ORDER BY st.display_order
-    `, [shiftId])).rows;
-  }
+  // Append any extra tasks added for today's date + shift.
+  const extraRows = (await pool.query(`
+    SELECT task_name
+    FROM extra_day_tasks
+    WHERE shift_id = $1 AND date = $2
+    ORDER BY display_order
+  `, [shiftId, today])).rows as { task_name: string }[];
 
-  const tasks = taskRows.map((t: { task_name: string }) => ({ text: t.task_name }));
+  const standingTasks = standingRows.map((t) => ({ text: t.task_name, isExtra: false }));
+  const extraTasks = extraRows.map((t) => ({ text: t.task_name, isExtra: true }));
+  const tasks = [...standingTasks, ...extraTasks];
 
   if (tasks.length === 0) {
     return void res.render("noTasks", {
@@ -54,6 +47,7 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
 
   res.render("todolist", {
     tasks,
+    standingCount: standingTasks.length,
     employeeName: req.session.employeeName,
     shift: shiftName,
   });

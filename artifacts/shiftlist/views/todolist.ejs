@@ -32,6 +32,11 @@
 
     <ul class="task-list" id="taskList">
       <% tasks.forEach(function(task, idx) { %>
+        <% if (task.isExtra && idx === standingCount) { %>
+          <li style="list-style:none; padding:10px 0 4px; text-align:center;">
+            <span style="font-size:0.75rem; font-weight:700; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase;">— Today only —</span>
+          </li>
+        <% } %>
         <li class="task-item" id="task-<%= idx %>" onclick="toggleTask(<%= idx %>)">
           <div class="task-checkbox" id="cb-<%= idx %>"></div>
           <span class="task-text" id="text-<%= idx %>"><%= task.text %></span>
@@ -103,7 +108,6 @@
     function showModal() {
       const modal = document.getElementById('incompleteModal');
       modal.style.display = 'flex';
-      // Copy main notes to modal
       const mainNotes = document.getElementById('notes').value;
       if (mainNotes) document.getElementById('modalNotes').value = mainNotes;
     }
