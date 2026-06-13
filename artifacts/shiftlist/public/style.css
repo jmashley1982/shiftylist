@@ -953,8 +953,8 @@ tbody tr:hover { background: rgba(56,182,160,.04); }
   color: var(--brand);
 }
 .report-task-line.task-missed {
-  color: var(--muted);
-  opacity: 0.75;
+  color: #f87171;
+  opacity: 0.8;
 }
 
 .report-notes {
