@@ -47,7 +47,9 @@ router.post("/confirm-name", (req, res) => {
 
 router.get("/select-shift", async (req, res) => {
   if (!req.session.employeeId) return void res.redirect("/login");
-  const shifts = (await pool.query("SELECT * FROM shifts ORDER BY name")).rows;
+  const shifts = (await pool.query(
+    `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
+  )).rows;
   res.render("selectShift", { employeeName: req.session.employeeName, shifts });
 });
 

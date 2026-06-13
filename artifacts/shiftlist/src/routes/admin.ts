@@ -115,7 +115,9 @@ router.post("/employees/delete/:id", async (req, res) => {
 // One screen to build a shift's standing checklist (always live) and optionally
 // add extra tasks for a specific day.
 router.get("/shifts", async (req, res) => {
-  const shifts = (await pool.query("SELECT * FROM shifts ORDER BY id")).rows;
+  const shifts = (await pool.query(
+    `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
+  )).rows;
 
   const requestedShift = Number(req.query.shift);
   const selectedShift =
