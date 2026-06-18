@@ -10,11 +10,14 @@
   <%- include('../partials/admin-nav', { active: 'live' }) %>
   <div class="main-content">
     <div class="page-header" style="margin-top:12px; display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-      <div>
-        <h1>Live Status</h1>
-        <p><%= formatDateDisplay(today) %> — real-time completion view</p>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <h1 style="margin:0;">Live Status</h1>
+        <span id="liveBadge" class="live-badge"><span class="live-badge-dot"></span><span id="liveBadgeLabel">LIVE</span></span>
       </div>
-      <span id="refreshCountdown" style="font-size:0.8rem; color:var(--muted); padding-top:4px;"></span>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+        <p style="margin:0; font-size:0.85rem; color:var(--muted);"><%= formatDateDisplay(today) %> — real-time completion view</p>
+        <span id="refreshCountdown" style="font-size:0.8rem; color:var(--muted);"></span>
+      </div>
     </div>
 
     <% if (shiftData.length === 0) { %>
@@ -140,17 +143,40 @@
       });
     }
 
+    var badgeEl = document.getElementById('liveBadge');
+    var badgeLabelEl = document.getElementById('liveBadgeLabel');
+
+    function setBadgeUpdating() {
+      if (!badgeEl) return;
+      badgeEl.classList.remove('flash');
+      badgeEl.classList.add('updating');
+      if (badgeLabelEl) badgeLabelEl.textContent = 'Updating…';
+    }
+
+    function setBadgeLive() {
+      if (!badgeEl) return;
+      badgeEl.classList.remove('updating');
+      if (badgeLabelEl) badgeLabelEl.textContent = 'LIVE';
+      // Trigger flash: remove then re-add to restart animation
+      badgeEl.classList.remove('flash');
+      void badgeEl.offsetWidth; // reflow
+      badgeEl.classList.add('flash');
+    }
+
     async function pollLive() {
+      setBadgeUpdating();
       try {
         var res = await fetch('/admin/live/data');
-        if (!res.ok) return;
+        if (!res.ok) { setBadgeLive(); return; }
         var data = await res.json();
         data.shiftData.forEach(function(sd) {
           var panel = document.querySelector('[data-shift-id="' + sd.shift.id + '"]');
           if (panel) updatePanel(panel, sd);
         });
+        setBadgeLive();
       } catch (_) {
         // ignore network errors — next tick will retry
+        setBadgeLive();
       }
     }
 

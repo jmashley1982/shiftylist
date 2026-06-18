@@ -979,3 +979,53 @@ tbody tr:hover { background: rgba(56,182,160,.04); }
   font-weight: 700;
   color: var(--text-mid);
 }
+
+/* ── Live badge ────────────────────────────────────────────────────────────── */
+@keyframes live-dot-pulse {
+  0%, 100% { opacity: 1;    transform: scale(1);    box-shadow: 0 0 0 0 rgba(56,182,160,.6); }
+  50%       { opacity: 0.7; transform: scale(1.15); box-shadow: 0 0 0 5px rgba(56,182,160,0); }
+}
+@keyframes live-badge-flash {
+  0%   { background: rgba(56,182,160,.35); }
+  100% { background: rgba(56,182,160,.12); }
+}
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  background: rgba(56,182,160,.12);
+  border: 1px solid rgba(56,182,160,.3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: var(--teal);
+  text-transform: uppercase;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.live-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  flex-shrink: 0;
+  animation: live-dot-pulse 2s ease-in-out infinite;
+}
+
+.live-badge.updating {
+  color: var(--muted);
+  border-color: rgba(255,255,255,.12);
+  background: rgba(255,255,255,.05);
+}
+.live-badge.updating .live-badge-dot {
+  animation: none;
+  opacity: 0.4;
+}
+
+.live-badge.flash {
+  animation: live-badge-flash 0.6s ease-out forwards;
+}
