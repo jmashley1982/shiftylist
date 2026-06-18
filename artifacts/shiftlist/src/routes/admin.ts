@@ -35,9 +35,10 @@ async function upsertTaskByName(client: PoolClient, name: string): Promise<numbe
   return res.rows[0].id as number;
 }
 
-/** Build the redirect URL back to the shifts hub, preserving shift. */
-function hubUrl(shiftId: number | string): string {
-  return `/admin/shifts?shift=${shiftId}`;
+/** Build the redirect URL back to the shifts hub, preserving shift and optional extraDate. */
+function hubUrl(shiftId: number | string, extraDate?: string): string {
+  const base = `/admin/shifts?shift=${shiftId}`;
+  return extraDate ? `${base}&extraDate=${extraDate}` : base;
 }
 
 /**
@@ -139,8 +140,12 @@ router.get("/shifts", async (req, res) => {
 
   const allTasks = (await pool.query("SELECT * FROM tasks ORDER BY name")).rows;
 
+  // extraDate lets admin browse extra tasks for any date (defaults to today)
+  const rawExtraDate = typeof req.query.extraDate === "string" ? req.query.extraDate.trim() : "";
+  const extraDate = /^\d{4}-\d{2}-\d{2}$/.test(rawExtraDate) ? rawExtraDate : today;
+
   let standingTasks: { id: number; task_name: string; display_order: number }[] = [];
-  let todayExtraTasks: { id: number; task_name: string; display_order: number }[] = [];
+  let extraTasks: { id: number; task_name: string; display_order: number }[] = [];
 
   if (selectedShift) {
     const [stRes, etRes] = await Promise.all([
@@ -157,11 +162,11 @@ router.get("/shifts", async (req, res) => {
          FROM extra_day_tasks
          WHERE shift_id = $1 AND date = $2
          ORDER BY display_order`,
-        [selectedShift.id, today]
+        [selectedShift.id, extraDate]
       ),
     ]);
     standingTasks = stRes.rows;
-    todayExtraTasks = etRes.rows;
+    extraTasks = etRes.rows;
   }
 
   res.render("admin/shifts", {
@@ -169,7 +174,8 @@ router.get("/shifts", async (req, res) => {
     selectedShift,
     allTasks,
     standingTasks,
-    todayExtraTasks,
+    extraTasks,
+    extraDate,
     today,
     formatDateDisplay,
   });
@@ -336,7 +342,18 @@ router.post("/shifts/:shiftId/standing/reorder", async (req, res) => {
 // ── Extra tasks for a specific day ──────────────────────────────────────────
 router.post("/shifts/:shiftId/day/:date/remove-extra/:id", async (req, res) => {
   await pool.query("DELETE FROM extra_day_tasks WHERE id = $1", [Number(req.params.id)]);
-  res.redirect(hubUrl(req.params.shiftId));
+  res.redirect(hubUrl(req.params.shiftId, req.params.date));
+});
+
+router.post("/shifts/:shiftId/day/:date/rename-extra/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const name = (req.body.name as string)?.trim();
+  if (!name) return void res.json({ ok: false, error: "Name required" });
+  await pool.query(
+    "UPDATE extra_day_tasks SET task_name = $1 WHERE id = $2 AND shift_id = $3 AND date = $4",
+    [name, id, Number(req.params.shiftId), req.params.date]
+  );
+  res.json({ ok: true });
 });
 
 router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {

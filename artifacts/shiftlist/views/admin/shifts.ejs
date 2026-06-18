@@ -127,25 +127,49 @@
           <% } %>
         </div>
 
-        <!-- ─────────────────── TODAY'S EXTRA TASKS ─────────────────── -->
-        <% if (todayExtraTasks.length > 0) { %>
-          <div class="panel" style="margin-bottom:14px;">
-            <div class="panel-header">
-              <h2 style="font-size:1rem;">Today-only extras · <span class="shift-badge" style="font-size:0.78rem;"><%= selectedShift.name %></span></h2>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:6px;">
-              <% todayExtraTasks.forEach(function(task) { %>
-                <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border);">
-                  <span style="flex:1; font-size:0.9rem;"><%= task.task_name %></span>
-                  <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= today %>/remove-extra/<%= task.id %>"
-                        onsubmit="return confirm('Remove this extra task for today?')" style="flex-shrink:0;">
+        <!-- ─────────────────── EXTRA TASKS (browseable by date) ─────────────────── -->
+        <div class="panel" style="margin-bottom:14px;">
+          <div class="panel-header">
+            <h2 style="font-size:1rem;">One-off extras · <span class="shift-badge" style="font-size:0.78rem;"><%= selectedShift.name %></span></h2>
+          </div>
+
+          <!-- Date browser -->
+          <form method="GET" action="/admin/shifts" id="extraDateForm"
+                style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+            <input type="hidden" name="shift" value="<%= selectedShift.id %>">
+            <label style="font-size:0.83rem; color:var(--muted); white-space:nowrap;">Browse date:</label>
+            <input type="date" name="extraDate" id="extraDatePicker" value="<%= extraDate %>"
+                   style="font-size:0.9rem; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+            <button type="submit" class="btn btn-sm btn-ghost">Go</button>
+            <% if (extraDate !== today) { %>
+              <a href="/admin/shifts?shift=<%= selectedShift.id %>" class="btn btn-sm btn-ghost" style="font-size:0.8rem;">← Today</a>
+            <% } %>
+            <span style="font-size:0.8rem; color:var(--muted);">
+              <%= extraDate === today ? 'Showing today\'s extras' : 'Showing extras for ' + formatDateDisplay(extraDate) %>
+            </span>
+          </form>
+
+          <% if (extraTasks.length > 0) { %>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <% extraTasks.forEach(function(task) { %>
+                <div class="extra-task-row" style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border);">
+                  <span class="extra-task-name" contenteditable="true" spellcheck="false"
+                        data-rename-url="/admin/shifts/<%= selectedShift.id %>/day/<%= extraDate %>/rename-extra/<%= task.id %>"
+                        style="flex:1; font-size:0.9rem; outline:none; border-radius:4px; padding:2px 4px;"
+                        ><%= task.task_name %></span>
+                  <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= extraDate %>/remove-extra/<%= task.id %>"
+                        onsubmit="return confirm('Remove this extra task?')" style="flex-shrink:0;">
                     <button type="submit" class="btn btn-danger btn-sm">✕</button>
                   </form>
                 </div>
               <% }); %>
             </div>
-          </div>
-        <% } %>
+          <% } else { %>
+            <p style="color:var(--muted); font-size:0.88rem; margin:0;">
+              No one-off extras for this date.
+            </p>
+          <% } %>
+        </div>
       <% } %>
 
       <!-- ─────────────────── MANAGE SHIFTS ─────────────────── -->
@@ -424,6 +448,58 @@
         initDragList(list);
         list.querySelectorAll('.task-edit-name').forEach(initEditable);
       });
+
+      // ── Extra task inline rename ─────────────────────────────────────────────
+      document.querySelectorAll('.extra-task-name').forEach(function(span) {
+        var original = span.textContent.trim();
+        var row = span.closest('.extra-task-row');
+
+        span.addEventListener('focus', function() {
+          span.style.background = 'var(--bg)';
+          span.style.boxShadow = '0 0 0 2px var(--teal)';
+          var range = document.createRange();
+          var sel = window.getSelection();
+          range.selectNodeContents(span);
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        });
+
+        span.addEventListener('blur', function() {
+          span.style.boxShadow = '';
+          span.style.background = '';
+          var val = span.textContent.trim();
+          if (!val || val === original) { span.textContent = original; return; }
+          fetch(span.dataset.renameUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: val }),
+          }).then(function(r) {
+            if (r.ok) { original = val; if (row) flashRow(row); }
+            else { span.textContent = original; showToast('Failed to rename — try again', true); }
+          }).catch(function() { span.textContent = original; showToast('Failed to rename — check your connection', true); });
+        });
+
+        span.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') { e.preventDefault(); span.blur(); }
+          if (e.key === 'Escape') { span.textContent = original; span.blur(); }
+        });
+
+        span.addEventListener('paste', function(e) {
+          e.preventDefault();
+          var text = e.clipboardData.getData('text/plain').replace(/\n/g, ' ');
+          document.execCommand('insertText', false, text);
+        });
+      });
+
+      // ── Extra date picker: auto-submit on change ─────────────────────────────
+      var extraDatePicker = document.getElementById('extraDatePicker');
+      var extraDateForm = document.getElementById('extraDateForm');
+      if (extraDatePicker && extraDateForm) {
+        extraDatePicker.addEventListener('change', function() {
+          extraDateForm.submit();
+        });
+      }
     })();
   </script>
 </body>
