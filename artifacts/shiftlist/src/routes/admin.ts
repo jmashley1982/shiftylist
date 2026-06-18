@@ -373,13 +373,28 @@ router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {
 });
 
 // ════════════════════════════════════ Live Status ════════════════════════════
-router.get("/live", async (_req, res) => {
-  const today = getTodayStr();
+
+interface LiveTask {
+  name: string;
+  isExtra: boolean;
+  completed: boolean;
+  completedBy: string | null;
+  completedAtIso: string | null;
+}
+
+interface LiveShiftData {
+  shift: { id: number; name: string };
+  tasks: LiveTask[];
+  done: number;
+  total: number;
+}
+
+async function fetchLiveData(today: string): Promise<LiveShiftData[]> {
   const shifts = (await pool.query(
     `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
   )).rows as { id: number; name: string }[];
 
-  const shiftData = await Promise.all(
+  return Promise.all(
     shifts.map(async (shift) => {
       const [standingRes, extraRes, compRes] = await Promise.all([
         pool.query(
@@ -415,7 +430,7 @@ router.get("/live", async (_req, res) => {
         });
       }
 
-      const tasks = [
+      const tasks: LiveTask[] = [
         ...(standingRes.rows as { task_name: string }[]).map((r) => ({
           name: r.task_name,
           isExtra: false,
@@ -439,8 +454,18 @@ router.get("/live", async (_req, res) => {
       return { shift, tasks, done, total: tasks.length };
     })
   );
+}
 
+router.get("/live", async (_req, res) => {
+  const today = getTodayStr();
+  const shiftData = await fetchLiveData(today);
   res.render("admin/live", { shiftData, today, formatDateDisplay });
+});
+
+router.get("/live/data", async (_req, res) => {
+  const today = getTodayStr();
+  const shiftData = await fetchLiveData(today);
+  res.json({ shiftData, today });
 });
 
 // ════════════════════════════════════ Reports ═════════════════════════════════

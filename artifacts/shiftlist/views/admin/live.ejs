@@ -25,11 +25,11 @@
 
     <div style="display:grid; gap:16px;">
       <% shiftData.forEach(function(sd) { %>
-        <div class="panel">
+        <div class="panel" data-shift-id="<%= sd.shift.id %>">
           <div class="panel-header" style="margin-bottom:12px;">
             <h2><span class="shift-badge"><%= sd.shift.name %></span></h2>
             <% if (sd.total > 0) { %>
-              <span style="font-size:0.9rem; color:var(--muted);"><%= sd.done %>/<%= sd.total %> done</span>
+              <span data-role="counter" style="font-size:0.9rem; color:var(--muted);"><%= sd.done %>/<%= sd.total %> done</span>
             <% } %>
           </div>
 
@@ -49,22 +49,22 @@
                     <span style="font-size:0.72rem; font-weight:700; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase;">— Today only —</span>
                   </li>
                 <% } %>
-                <li style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
+                <li data-task-name="<%= task.name %>" style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
                   <% if (task.completed) { %>
-                    <span style="width:22px; height:22px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-size:0.78rem; color:#fff; flex-shrink:0; font-weight:700;">✓</span>
+                    <span data-role="check-icon" style="width:22px; height:22px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-size:0.78rem; color:#fff; flex-shrink:0; font-weight:700;">✓</span>
                   <% } else { %>
-                    <span style="width:22px; height:22px; border-radius:50%; border:2px solid var(--border); flex-shrink:0;"></span>
+                    <span data-role="check-icon" style="width:22px; height:22px; border-radius:50%; border:2px solid var(--border); flex-shrink:0;"></span>
                   <% } %>
-                  <span style="flex:1; font-size:0.9rem;<%= task.completed ? ' color:var(--muted); text-decoration:line-through;' : '' %>"><%= task.name %></span>
+                  <span data-role="task-name" style="flex:1; font-size:0.9rem;<%= task.completed ? ' color:var(--muted); text-decoration:line-through;' : '' %>"><%= task.name %></span>
                   <% if (task.completed) { %>
-                    <span style="font-size:0.78rem; color:var(--muted); white-space:nowrap; text-align:right;">
+                    <span data-role="task-info" style="font-size:0.78rem; color:var(--muted); white-space:nowrap; text-align:right;">
                       <%= task.completedBy %>
                       <% if (task.completedAtIso) { %>
                         &middot; <span class="live-ts" data-ts="<%= task.completedAtIso %>"></span>
                       <% } %>
                     </span>
                   <% } else { %>
-                    <span style="font-size:0.75rem; color:var(--muted); opacity:0.6;">pending</span>
+                    <span data-role="task-info" style="font-size:0.75rem; color:var(--muted); opacity:0.6;">pending</span>
                   <% } %>
                 </li>
               <% }); %>
@@ -76,21 +76,99 @@
   </div>
 
   <script>
-    // Format timestamps in browser's local timezone
+    var POLL_SECONDS = 10;
+
+    function fmtTime(iso) {
+      return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
+
+    // Format timestamps rendered server-side on initial load
     document.querySelectorAll('.live-ts').forEach(function(el) {
       var ts = el.dataset.ts;
-      if (ts) el.textContent = new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      if (ts) el.textContent = fmtTime(ts);
     });
 
-    // Auto-refresh with countdown
-    var seconds = 30;
-    var el = document.getElementById('refreshCountdown');
+    function updatePanel(panelEl, sd) {
+      // Progress bar
+      var fill = panelEl.querySelector('.progress-bar-fill');
+      if (fill && sd.total > 0) {
+        fill.style.width = Math.round(sd.done / sd.total * 100) + '%';
+      }
+
+      // Counter
+      var counter = panelEl.querySelector('[data-role="counter"]');
+      if (counter) counter.textContent = sd.done + '/' + sd.total + ' done';
+
+      // Task rows
+      sd.tasks.forEach(function(task) {
+        var li = panelEl.querySelector('[data-task-name="' + CSS.escape(task.name) + '"]');
+        if (!li) return;
+
+        var icon = li.querySelector('[data-role="check-icon"]');
+        var nameEl = li.querySelector('[data-role="task-name"]');
+        var infoEl = li.querySelector('[data-role="task-info"]');
+
+        if (task.completed) {
+          if (icon) {
+            icon.style.cssText = 'width:22px; height:22px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-size:0.78rem; color:#fff; flex-shrink:0; font-weight:700;';
+            icon.textContent = '✓';
+          }
+          if (nameEl) {
+            nameEl.style.color = 'var(--muted)';
+            nameEl.style.textDecoration = 'line-through';
+          }
+          if (infoEl) {
+            var info = task.completedBy || '';
+            if (task.completedAtIso) info += ' · ' + fmtTime(task.completedAtIso);
+            infoEl.style.cssText = 'font-size:0.78rem; color:var(--muted); white-space:nowrap; text-align:right;';
+            infoEl.textContent = info;
+          }
+        } else {
+          if (icon) {
+            icon.style.cssText = 'width:22px; height:22px; border-radius:50%; border:2px solid var(--border); flex-shrink:0;';
+            icon.textContent = '';
+          }
+          if (nameEl) {
+            nameEl.style.color = '';
+            nameEl.style.textDecoration = '';
+          }
+          if (infoEl) {
+            infoEl.style.cssText = 'font-size:0.75rem; color:var(--muted); opacity:0.6;';
+            infoEl.textContent = 'pending';
+          }
+        }
+      });
+    }
+
+    async function pollLive() {
+      try {
+        var res = await fetch('/admin/live/data');
+        if (!res.ok) return;
+        var data = await res.json();
+        data.shiftData.forEach(function(sd) {
+          var panel = document.querySelector('[data-shift-id="' + sd.shift.id + '"]');
+          if (panel) updatePanel(panel, sd);
+        });
+      } catch (_) {
+        // ignore network errors — next tick will retry
+      }
+    }
+
+    // Countdown + polling
+    var seconds = POLL_SECONDS;
+    var countdownEl = document.getElementById('refreshCountdown');
+
     function tick() {
-      if (el) el.textContent = 'Refreshes in ' + seconds + 's';
-      if (seconds === 0) { window.location.reload(); return; }
-      seconds--;
+      if (countdownEl) countdownEl.textContent = 'Updates in ' + seconds + 's';
+      if (seconds === 0) {
+        seconds = POLL_SECONDS;
+        pollLive();
+      } else {
+        seconds--;
+      }
       setTimeout(tick, 1000);
     }
+
     tick();
   </script>
 </body>
