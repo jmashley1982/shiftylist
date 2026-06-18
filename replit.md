@@ -63,6 +63,7 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 - Database schema changes are managed via Drizzle. After schema changes, run `pnpm --filter @workspace/db run push-force` to update the dev DB (use `push-force` — plain `push` may prompt interactively about constraint renames).
 - The dev database is separate from production — when you publish, Replit will sync the schema to production.
 - One unique index (`shift_tasks_shift_id_display_order_idx`) was applied directly via SQL (not through Drizzle). If you re-provision the production DB, re-apply it: `CREATE UNIQUE INDEX IF NOT EXISTS shift_tasks_shift_id_display_order_idx ON shift_tasks (shift_id, display_order);`
+- The `active_sessions` table was also created via raw SQL (Drizzle push prompts interactively for the unique constraint and fails in CI). `scripts/post-merge.sh` creates it idempotently after every task merge. If you re-provision the production DB, the post-merge script handles it automatically.
 
 ## Environment secrets required
 

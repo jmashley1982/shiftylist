@@ -1,1 +1,2 @@
 - [Preview kind fix](preview-kind.md) — kind="api" artifacts are excluded from the Replit preview pane; only web/slides/video/mobile/design kinds appear.
+- [Raw-SQL tables and post-merge](raw-sql-post-merge.md) — tables created via raw SQL by task agents won't exist in the main dev DB unless post-merge.sh applies them idempotently.
