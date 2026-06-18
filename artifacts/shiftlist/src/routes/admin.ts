@@ -446,7 +446,10 @@ router.get("/live", async (_req, res) => {
 // ════════════════════════════════════ Reports ═════════════════════════════════
 router.get("/reports", async (req, res) => {
   try {
-    await pool.query("DELETE FROM submissions WHERE submitted_at < NOW() - INTERVAL '30 days'");
+    await Promise.all([
+      pool.query("DELETE FROM submissions WHERE submitted_at < NOW() - INTERVAL '30 days'"),
+      pool.query("DELETE FROM task_completions WHERE date::date < CURRENT_DATE - INTERVAL '30 days'"),
+    ]);
     const employeeFilter = typeof req.query.employee === "string" && req.query.employee.trim()
       ? req.query.employee.trim()
       : null;
