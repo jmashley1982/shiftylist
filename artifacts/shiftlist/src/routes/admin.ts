@@ -389,83 +389,121 @@ interface LiveShiftData {
   total: number;
 }
 
-async function fetchLiveData(today: string): Promise<LiveShiftData[]> {
+interface ActiveStaffSession {
+  employeeName: string;
+  shiftName: string;
+  startedAtIso: string;
+}
+
+interface LiveData {
+  shiftData: LiveShiftData[];
+  activeSessions: ActiveStaffSession[];
+}
+
+async function fetchLiveData(today: string): Promise<LiveData> {
   const shifts = (await pool.query(
     `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
   )).rows as { id: number; name: string }[];
 
-  return Promise.all(
-    shifts.map(async (shift) => {
-      const [standingRes, extraRes, compRes] = await Promise.all([
-        pool.query(
-          `SELECT t.name as task_name FROM shift_tasks st
-           JOIN tasks t ON t.id = st.task_id
-           WHERE st.shift_id = $1 ORDER BY st.display_order`,
-          [shift.id]
-        ),
-        pool.query(
-          `SELECT task_name FROM extra_day_tasks
-           WHERE shift_id = $1 AND date = $2 ORDER BY display_order`,
-          [shift.id, today]
-        ),
-        pool.query(
-          `SELECT task_name, completed_by_name, completed_at
-           FROM task_completions WHERE date = $1 AND shift_id = $2`,
-          [today, shift.id]
-        ),
-      ]);
+  // Fetch active sessions and shift data concurrently
+  const [shiftData, activeSessionsRes] = await Promise.all([
+    Promise.all(
+      shifts.map(async (shift) => {
+        const [standingRes, extraRes, compRes] = await Promise.all([
+          pool.query(
+            `SELECT t.name as task_name FROM shift_tasks st
+             JOIN tasks t ON t.id = st.task_id
+             WHERE st.shift_id = $1 ORDER BY st.display_order`,
+            [shift.id]
+          ),
+          pool.query(
+            `SELECT task_name FROM extra_day_tasks
+             WHERE shift_id = $1 AND date = $2 ORDER BY display_order`,
+            [shift.id, today]
+          ),
+          pool.query(
+            `SELECT task_name, completed_by_name, completed_at
+             FROM task_completions WHERE date = $1 AND shift_id = $2`,
+            [today, shift.id]
+          ),
+        ]);
 
-      const compMap = new Map<string, { by: string; at: string }>();
-      for (const row of compRes.rows as {
-        task_name: string;
-        completed_by_name: string;
-        completed_at: Date | string;
-      }[]) {
-        compMap.set(row.task_name, {
-          by: row.completed_by_name,
-          at:
-            row.completed_at instanceof Date
-              ? row.completed_at.toISOString()
-              : String(row.completed_at),
+        const compMap = new Map<string, { by: string; at: string }>();
+        for (const row of compRes.rows as {
+          task_name: string;
+          completed_by_name: string;
+          completed_at: Date | string;
+        }[]) {
+          compMap.set(row.task_name, {
+            by: row.completed_by_name,
+            at:
+              row.completed_at instanceof Date
+                ? row.completed_at.toISOString()
+                : String(row.completed_at),
+          });
+        }
+
+        const tasks: LiveTask[] = [
+          ...(standingRes.rows as { task_name: string }[]).map((r) => ({
+            name: r.task_name,
+            isExtra: false,
+          })),
+          ...(extraRes.rows as { task_name: string }[]).map((r) => ({
+            name: r.task_name,
+            isExtra: true,
+          })),
+        ].map((t) => {
+          const c = compMap.get(t.name);
+          return {
+            name: t.name,
+            isExtra: t.isExtra,
+            completed: !!c,
+            completedBy: c?.by ?? null,
+            completedAtIso: c?.at ?? null,
+          };
         });
-      }
 
-      const tasks: LiveTask[] = [
-        ...(standingRes.rows as { task_name: string }[]).map((r) => ({
-          name: r.task_name,
-          isExtra: false,
-        })),
-        ...(extraRes.rows as { task_name: string }[]).map((r) => ({
-          name: r.task_name,
-          isExtra: true,
-        })),
-      ].map((t) => {
-        const c = compMap.get(t.name);
-        return {
-          name: t.name,
-          isExtra: t.isExtra,
-          completed: !!c,
-          completedBy: c?.by ?? null,
-          completedAtIso: c?.at ?? null,
-        };
-      });
+        const done = tasks.filter((t) => t.completed).length;
+        return { shift, tasks, done, total: tasks.length };
+      })
+    ),
+    pool.query(
+      `SELECT employee_name, shift_name, started_at
+       FROM active_sessions
+       WHERE date = $1
+       ORDER BY started_at`,
+      [today]
+    ),
+  ]);
 
-      const done = tasks.filter((t) => t.completed).length;
-      return { shift, tasks, done, total: tasks.length };
-    })
-  );
+  const activeSessions: ActiveStaffSession[] = (
+    activeSessionsRes.rows as {
+      employee_name: string;
+      shift_name: string;
+      started_at: Date | string;
+    }[]
+  ).map((r) => ({
+    employeeName: r.employee_name,
+    shiftName: r.shift_name,
+    startedAtIso:
+      r.started_at instanceof Date
+        ? r.started_at.toISOString()
+        : String(r.started_at),
+  }));
+
+  return { shiftData, activeSessions };
 }
 
 router.get("/live", async (_req, res) => {
   const today = getTodayStr();
-  const shiftData = await fetchLiveData(today);
-  res.render("admin/live", { shiftData, today, formatDateDisplay });
+  const { shiftData, activeSessions } = await fetchLiveData(today);
+  res.render("admin/live", { shiftData, activeSessions, today, formatDateDisplay });
 });
 
 router.get("/live/data", async (_req, res) => {
   const today = getTodayStr();
-  const shiftData = await fetchLiveData(today);
-  res.json({ shiftData, today });
+  const { shiftData, activeSessions } = await fetchLiveData(today);
+  res.json({ shiftData, activeSessions, today });
 });
 
 // ════════════════════════════════════ Reports ═════════════════════════════════

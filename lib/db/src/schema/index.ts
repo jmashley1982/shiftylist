@@ -94,3 +94,18 @@ export const taskCompletions = pgTable("task_completions", {
 
 export type TaskCompletion = typeof taskCompletions.$inferSelect;
 export type InsertTaskCompletion = typeof taskCompletions.$inferInsert;
+
+// Active staff sessions: set when a shift is selected, cleared on submission
+export const activeSessions = pgTable("active_sessions", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  employeeName: text("employee_name").notNull(),
+  shiftId: integer("shift_id").notNull().references(() => shifts.id, { onDelete: "cascade" }),
+  shiftName: text("shift_name").notNull(),
+  date: text("date").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique().on(table.employeeId, table.date),
+]);
+
+export type ActiveSession = typeof activeSessions.$inferSelect;

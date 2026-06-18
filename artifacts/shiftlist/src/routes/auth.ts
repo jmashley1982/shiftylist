@@ -57,7 +57,22 @@ router.post("/select-shift", async (req, res) => {
   if (!req.session.employeeId) return void res.redirect("/login");
   const { shiftId } = req.body as { shiftId: string };
   if (!shiftId) return void res.redirect("/select-shift");
-  req.session.selectedShiftId = Number(shiftId);
+  const shiftIdNum = Number(shiftId);
+  req.session.selectedShiftId = shiftIdNum;
+
+  const today = (await import("../utils/dateHelpers.js")).getTodayStr();
+  const shiftRow = await pool.query("SELECT name FROM shifts WHERE id = $1", [shiftIdNum]);
+  const shiftName = (shiftRow.rows[0] as { name: string } | undefined)?.name ?? "";
+  await pool.query(
+    `INSERT INTO active_sessions (employee_id, employee_name, shift_id, shift_name, date)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (employee_id, date) DO UPDATE
+       SET shift_id = EXCLUDED.shift_id,
+           shift_name = EXCLUDED.shift_name,
+           started_at = NOW()`,
+    [req.session.employeeId, req.session.employeeName ?? "", shiftIdNum, shiftName, today]
+  );
+
   res.redirect("/staff/tasks");
 });
 

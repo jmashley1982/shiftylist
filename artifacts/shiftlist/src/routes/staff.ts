@@ -185,6 +185,17 @@ router.post("/submit", ensureStaffAuth, async (req, res) => {
   }
 
   req.session.selectedShiftId = undefined;
+
+  // Clear active session record so admin live view shows them as finished
+  try {
+    await pool.query(
+      "DELETE FROM active_sessions WHERE employee_id = $1 AND date = $2",
+      [req.session.employeeId, date]
+    );
+  } catch {
+    // non-fatal
+  }
+
   res.render("submitted", {
     employeeName: req.session.employeeName,
     shift: shiftName,

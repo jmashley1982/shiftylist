@@ -20,6 +20,34 @@
       </div>
     </div>
 
+    <!-- Currently active staff -->
+    <div class="panel" id="activeSessionsPanel" style="margin-bottom:8px;">
+      <div class="panel-header" style="margin-bottom:10px;">
+        <h2 style="display:flex; align-items:center; gap:8px;">
+          <span style="width:9px; height:9px; border-radius:50%; background:var(--teal); display:inline-block; flex-shrink:0;"></span>
+          Currently active
+        </h2>
+        <span id="activeCount" style="font-size:0.9rem; color:var(--muted);">
+          <%= activeSessions.length %> on shift
+        </span>
+      </div>
+      <div id="activeSessionsList">
+        <% if (activeSessions.length === 0) { %>
+          <p style="color:var(--muted); font-size:0.88rem; margin:0;" id="activeEmpty">No staff currently active.</p>
+        <% } else { %>
+          <ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;">
+            <% activeSessions.forEach(function(s) { %>
+              <li style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
+                <span style="font-weight:600; flex:1; font-size:0.92rem;"><%= s.employeeName %></span>
+                <span class="shift-badge" style="font-size:0.8rem;"><%= s.shiftName %></span>
+                <span style="font-size:0.78rem; color:var(--muted); white-space:nowrap;">since <span class="live-ts" data-ts="<%= s.startedAtIso %>"></span></span>
+              </li>
+            <% }); %>
+          </ul>
+        <% } %>
+      </div>
+    </div>
+
     <% if (shiftData.length === 0) { %>
       <div class="panel">
         <p style="color:var(--muted); font-size:0.9rem;">No shifts set up yet. <a href="/admin/shifts">Create one</a>.</p>
@@ -163,6 +191,38 @@
       badgeEl.classList.add('flash');
     }
 
+    function updateActiveSessions(sessions) {
+      var listEl = document.getElementById('activeSessionsList');
+      var countEl = document.getElementById('activeCount');
+      if (!listEl) return;
+
+      if (countEl) countEl.textContent = sessions.length + ' on shift';
+
+      if (sessions.length === 0) {
+        listEl.innerHTML = '<p style="color:var(--muted); font-size:0.88rem; margin:0;">No staff currently active.</p>';
+        return;
+      }
+
+      var html = '<ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;">';
+      sessions.forEach(function(s) {
+        html += '<li style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">'
+          + '<span style="font-weight:600; flex:1; font-size:0.92rem;">' + escHtml(s.employeeName) + '</span>'
+          + '<span class="shift-badge" style="font-size:0.8rem;">' + escHtml(s.shiftName) + '</span>'
+          + '<span style="font-size:0.78rem; color:var(--muted); white-space:nowrap;">since ' + fmtTime(s.startedAtIso) + '</span>'
+          + '</li>';
+      });
+      html += '</ul>';
+      listEl.innerHTML = html;
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     async function pollLive() {
       setBadgeUpdating();
       try {
@@ -173,6 +233,9 @@
           var panel = document.querySelector('[data-shift-id="' + sd.shift.id + '"]');
           if (panel) updatePanel(panel, sd);
         });
+        if (data.activeSessions) {
+          updateActiveSessions(data.activeSessions);
+        }
         setBadgeLive();
       } catch (_) {
         // ignore network errors — next tick will retry
