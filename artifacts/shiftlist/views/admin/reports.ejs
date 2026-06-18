@@ -44,9 +44,7 @@
                   <div class="report-card-header">
                     <span class="report-employee"><%= row.employee_name || '—' %></span>
                     <span class="report-time">
-                      <%= row.submitted_at
-                        ? new Date(row.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : '—' %>
+                      <%= row.submitted_at ? formatLocalTime(row.submitted_at) : '—' %>
                     </span>
                   </div>
 

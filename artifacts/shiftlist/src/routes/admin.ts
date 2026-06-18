@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db/index.js";
 import { ensureAdminAuth } from "../middleware/auth.js";
-import { getTodayStr, formatDateDisplay } from "../utils/dateHelpers.js";
+import { getTodayStr, formatDateDisplay, formatLocalTime } from "../utils/dateHelpers.js";
 
 const router = Router();
 router.use(ensureAdminAuth);
@@ -553,11 +553,11 @@ router.get("/reports", async (req, res) => {
         return { date, label, shifts };
       });
 
-    res.render("admin/reports", { groups, dbError: false, employeeFilter });
+    res.render("admin/reports", { groups, dbError: false, employeeFilter, formatLocalTime });
   } catch (err) {
     const { logger } = await import("../lib/logger.js");
     logger.error({ err }, "Failed to load submissions from DB");
-    res.render("admin/reports", { groups: [], dbError: true, employeeFilter: null });
+    res.render("admin/reports", { groups: [], dbError: true, employeeFilter: null, formatLocalTime });
   }
 });
 

@@ -70,6 +70,7 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 |---|---|
 | `SESSION_SECRET` | ✅ Already set — session security |
 | `ADMIN_CODE` | Admin panel login (defaults to `1234` if unset) |
+| `STORE_TIMEZONE` | Store's IANA timezone (defaults to `America/Chicago`). Set this if the store is not in the US Central timezone — e.g. `America/Denver`, `America/Los_Angeles`, `America/New_York`. Controls all date strings and displayed timestamps. |
 
 ## Pointers
 
