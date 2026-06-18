@@ -78,3 +78,19 @@ export const submissions = pgTable("submissions", {
 
 export type Submission = typeof submissions.$inferSelect;
 export type InsertSubmission = typeof submissions.$inferInsert;
+
+// Per-day shared task completion state (keyed on date + shift + task name; presence = done)
+export const taskCompletions = pgTable("task_completions", {
+  id: serial("id").primaryKey(),
+  date: text("date").notNull(),
+  shiftId: integer("shift_id").notNull().references(() => shifts.id, { onDelete: "cascade" }),
+  taskName: text("task_name").notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }).defaultNow().notNull(),
+  completedByName: text("completed_by_name").notNull(),
+  completedByCode: text("completed_by_code").notNull(),
+}, (table) => [
+  unique().on(table.date, table.shiftId, table.taskName),
+]);
+
+export type TaskCompletion = typeof taskCompletions.$inferSelect;
+export type InsertTaskCompletion = typeof taskCompletions.$inferInsert;

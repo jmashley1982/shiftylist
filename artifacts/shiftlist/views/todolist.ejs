@@ -84,59 +84,126 @@
   </div>
 
   <script>
-    const taskData = <%- JSON.stringify(tasks.map(function(t){ return { text: t.text, completed: false, completionTime: null }; })) %>;
-    let pendingSubmission = false;
+    var currentEmployee = <%- JSON.stringify(employeeName) %>;
+    var serverCompletions = <%- JSON.stringify(completionMap) %>;
+
+    var taskData = <%- JSON.stringify(tasks.map(function(t){ return { text: t.text, completed: false, completionTime: null, completedByName: null }; })) %>;
+
+    // Pre-fill from server completions (preserves state across page loads)
+    taskData.forEach(function(t) {
+      var c = serverCompletions[t.text];
+      if (c) {
+        t.completed = true;
+        t.completionTime = new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        t.completedByName = c.byName;
+      }
+    });
+
+    function renderTask(idx) {
+      var t = taskData[idx];
+      var item   = document.getElementById('task-' + idx);
+      var cb     = document.getElementById('cb-' + idx);
+      var timeEl = document.getElementById('time-' + idx);
+      if (!item || !cb || !timeEl) return;
+
+      item.classList.toggle('done', t.completed);
+      cb.classList.toggle('checked', t.completed);
+      cb.textContent = t.completed ? '✓' : '';
+
+      if (t.completed) {
+        var parts = [];
+        // Only show name when someone else completed it
+        if (t.completedByName && t.completedByName !== currentEmployee) parts.push(t.completedByName);
+        if (t.completionTime) parts.push(t.completionTime);
+        timeEl.textContent = parts.join(' · ');
+      } else {
+        timeEl.textContent = '';
+      }
+    }
 
     function updateProgress() {
-      const done = taskData.filter(function(t){ return t.completed; }).length;
-      const pct = taskData.length ? Math.round(done / taskData.length * 100) : 0;
+      var done = taskData.filter(function(t){ return t.completed; }).length;
+      var pct  = taskData.length ? Math.round(done / taskData.length * 100) : 0;
       document.getElementById('progressBar').style.width = pct + '%';
       document.getElementById('progressText').textContent = done + ' / ' + taskData.length + ' completed';
     }
 
-    function toggleTask(idx) {
-      const completed = !taskData[idx].completed;
-      const time = completed ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
-      taskData[idx].completed = completed;
-      taskData[idx].completionTime = time;
+    // Apply server state on load
+    taskData.forEach(function(_, idx) { renderTask(idx); });
+    updateProgress();
 
-      const item = document.getElementById('task-' + idx);
-      const cb   = document.getElementById('cb-' + idx);
-      item.classList.toggle('done', completed);
-      cb.classList.toggle('checked', completed);
-      cb.textContent = completed ? '✓' : '';
-      document.getElementById('time-' + idx).textContent = time ? time : '';
+    var toggling = false;
+
+    async function toggleTask(idx) {
+      if (toggling) return;
+      toggling = true;
+
+      var prev = {
+        completed: taskData[idx].completed,
+        completionTime: taskData[idx].completionTime,
+        completedByName: taskData[idx].completedByName
+      };
+      var completing = !prev.completed;
+
+      // Optimistic update
+      taskData[idx].completed     = completing;
+      taskData[idx].completionTime = completing
+        ? new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+        : null;
+      taskData[idx].completedByName = completing ? currentEmployee : null;
+
+      renderTask(idx);
       updateProgress();
+
+      try {
+        var resp = await fetch(completing ? '/staff/complete' : '/staff/uncomplete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'taskName=' + encodeURIComponent(taskData[idx].text)
+        });
+        if (!resp.ok) throw new Error('server error');
+      } catch(e) {
+        // Revert on failure
+        taskData[idx].completed      = prev.completed;
+        taskData[idx].completionTime  = prev.completionTime;
+        taskData[idx].completedByName = prev.completedByName;
+        renderTask(idx);
+        updateProgress();
+      } finally {
+        toggling = false;
+      }
     }
 
+    var pendingSubmission = false;
+
     function showModal() {
-      const modal = document.getElementById('incompleteModal');
+      var modal = document.getElementById('incompleteModal');
       modal.style.display = 'flex';
-      const mainNotes = document.getElementById('notes').value;
+      var mainNotes = document.getElementById('notes').value;
       if (mainNotes) document.getElementById('modalNotes').value = mainNotes;
     }
 
     function closeModal() {
       document.getElementById('incompleteModal').style.display = 'none';
       pendingSubmission = false;
-      const btn = document.getElementById('submitBtn');
+      var btn = document.getElementById('submitBtn');
       btn.disabled = false;
       btn.textContent = 'Submit Shift Report';
     }
 
     function confirmSubmit() {
-      const modalNotes = document.getElementById('modalNotes').value;
+      var modalNotes = document.getElementById('modalNotes').value;
       if (modalNotes) document.getElementById('notes').value = modalNotes;
       closeModal();
       doSubmit();
     }
 
     function submitShift() {
-      const btn = document.getElementById('submitBtn');
+      var btn = document.getElementById('submitBtn');
       btn.disabled = true;
       btn.textContent = 'Submitting…';
 
-      const done = taskData.filter(function(t){ return t.completed; }).length;
+      var done = taskData.filter(function(t){ return t.completed; }).length;
       if (done < taskData.length) {
         pendingSubmission = true;
         showModal();
@@ -147,10 +214,10 @@
     }
 
     async function doSubmit() {
-      const btn = document.getElementById('submitBtn');
-      const notes = document.getElementById('notes').value;
+      var btn = document.getElementById('submitBtn');
+      var notes = document.getElementById('notes').value;
       try {
-        const res = await fetch('/staff/submit', {
+        var res = await fetch('/staff/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'tasks=' + encodeURIComponent(JSON.stringify(taskData)) + '&notes=' + encodeURIComponent(notes)
@@ -168,8 +235,6 @@
         btn.textContent = 'Submit Shift Report';
       }
     }
-
-    updateProgress();
   </script>
 </body>
 </html>

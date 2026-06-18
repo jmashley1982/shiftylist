@@ -27,45 +27,82 @@
       </div>
     <% } else { %>
 
-      <!-- Shift picker -->
-      <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
-        <% shifts.forEach(function(s) { %>
-          <a href="/admin/shifts?shift=<%= s.id %>"
-             class="btn btn-sm <%= selectedShift && s.id === selectedShift.id ? 'btn-primary' : 'btn-ghost' %>"
-             style="flex:1; min-width:80px;"><%= s.name %></a>
-        <% }); %>
-      </div>
-
-      <!-- Mode toggle: standing list vs a specific day -->
-      <div style="display:flex; gap:8px; margin-bottom:16px;">
-        <a href="/admin/shifts?shift=<%= selectedShift.id %>"
-           class="btn btn-sm <%= !dayMode ? 'btn-primary' : 'btn-ghost' %>" style="flex:1;">Standing list</a>
-        <a href="/admin/shifts?shift=<%= selectedShift.id %>&date=<%= today %>"
-           class="btn btn-sm <%= dayMode ? 'btn-primary' : 'btn-ghost' %>" style="flex:1;">A specific day</a>
-      </div>
-
       <datalist id="taskSuggestions">
         <% allTasks.forEach(function(t) { %><option value="<%= t.name %>"></option><% }); %>
       </datalist>
 
-      <% if (!dayMode) { %>
-        <!-- ───────────────── STANDING LIST ───────────────── -->
-        <div class="panel">
+      <!-- ─────────────────── ADD A TASK ─────────────────── -->
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header"><h2>Add a Task</h2></div>
+        <form method="POST" action="/admin/shifts/add-task" id="addTaskForm">
+
+          <div style="margin-bottom:12px;">
+            <input type="text" name="name" list="taskSuggestions"
+                   placeholder="Type a task name…" required autocomplete="off"
+                   style="width:100%; font-size:0.95rem; padding:9px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text);">
+          </div>
+
+          <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px;">
+            <label style="display:flex; align-items:center; gap:7px; cursor:pointer; font-size:0.9rem;">
+              <input type="radio" name="type" value="daily" id="typeDaily" checked>
+              <span><strong>Daily</strong> — always on the standing list</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:7px; cursor:pointer; font-size:0.9rem;">
+              <input type="radio" name="type" value="oneoff" id="typeOneoff">
+              <span><strong>One-off</strong> — appears on a specific date only</span>
+            </label>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <div style="font-size:0.78rem; font-weight:700; color:var(--muted); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:7px;">Shift(s)</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <% shifts.forEach(function(s) { %>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem; background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:6px 12px;">
+                  <input type="checkbox" name="shiftIds" value="<%= s.id %>"> <%= s.name %>
+                </label>
+              <% }); %>
+            </div>
+          </div>
+
+          <!-- Date selector — shown only for One-off -->
+          <div id="dateSelector" style="display:none; margin-bottom:12px;">
+            <div style="font-size:0.78rem; font-weight:700; color:var(--muted); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:7px;">Date</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
+                <input type="radio" name="dateChoice" value="today" id="dateToday" checked> Today's list(s)
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
+                <input type="radio" name="dateChoice" value="pick" id="datePick"> Pick a date
+              </label>
+              <input type="date" name="date" id="addTaskDate" value="<%= today %>"
+                     style="display:none; font-size:0.9rem; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full">Add Task</button>
+        </form>
+      </div>
+
+      <!-- ─────────────────── SHIFT PICKER ─────────────────── -->
+      <% if (selectedShift) { %>
+        <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+          <% shifts.forEach(function(s) { %>
+            <a href="/admin/shifts?shift=<%= s.id %>"
+               class="btn btn-sm <%= s.id === selectedShift.id ? 'btn-primary' : 'btn-ghost' %>"
+               style="flex:1; min-width:80px;"><%= s.name %></a>
+          <% }); %>
+        </div>
+
+        <!-- ─────────────────── STANDING LIST ─────────────────── -->
+        <div class="panel" style="margin-bottom:14px;">
           <div class="panel-header">
-            <h2><span class="shift-badge"><%= selectedShift.name %></span></h2>
+            <h2><span class="shift-badge"><%= selectedShift.name %></span> standing list</h2>
             <span style="color:var(--muted); font-size:0.82rem;" data-task-count><%= standingTasks.length %> task<%= standingTasks.length === 1 ? '' : 's' %></span>
           </div>
 
-          <div class="alert alert-success" style="margin-bottom:14px;">
-            Always live — staff on the <%= selectedShift.name %> shift see this list today.
+          <div class="alert alert-success" style="margin-bottom:12px; font-size:0.83rem;">
+            Always live — staff on the <%= selectedShift.name %> shift see this checklist every day.
           </div>
-
-          <form id="standingAddForm" method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/add"
-                style="display:flex; gap:8px; margin-bottom:14px;">
-            <input type="text" name="name" list="taskSuggestions" placeholder="Type a task and press Enter…"
-                   required autofocus autocomplete="off" style="flex:1;">
-            <button type="submit" class="btn btn-primary btn-sm">Add</button>
-          </form>
 
           <% if (standingTasks.length > 0) { %>
             <div class="task-edit-list"
@@ -77,71 +114,41 @@
                   <span class="task-edit-name" contenteditable="true" spellcheck="false"
                         data-rename-url="/admin/shifts/<%= selectedShift.id %>/standing/rename/<%= task.id %>"><%= task.task_name %></span>
                   <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/remove/<%= task.id %>"
-                        onsubmit="return confirm('Remove this task?')" style="flex-shrink:0;">
+                        onsubmit="return confirm('Remove this task from the standing list?')" style="flex-shrink:0;">
                     <button type="submit" class="btn btn-danger btn-sm">✕</button>
                   </form>
                 </div>
               <% }); %>
             </div>
           <% } else { %>
-            <p class="standing-empty" style="color:var(--muted); font-size:0.88rem;">No tasks yet. Type one above to start building this shift.</p>
+            <p style="color:var(--muted); font-size:0.88rem;">
+              No tasks yet. Use "Add a Task" above to build this shift's checklist.
+            </p>
           <% } %>
         </div>
 
-      <% } else { %>
-        <!-- ───────────────── SPECIFIC DAY (extra tasks only) ───────────────── -->
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
-          <a href="/admin/shifts?shift=<%= selectedShift.id %>&date=<%= prevDate %>" class="btn btn-ghost btn-sm">←</a>
-          <div style="display:flex; align-items:center; gap:8px; flex:1;">
-            <input type="date" id="datePicker" value="<%= date %>" style="flex:1; font-size:0.95rem; padding:6px 10px;">
-            <button onclick="goToDate()" class="btn btn-primary btn-sm">Go</button>
-          </div>
-          <a href="/admin/shifts?shift=<%= selectedShift.id %>&date=<%= nextDate %>" class="btn btn-ghost btn-sm">→</a>
-        </div>
-
-        <div style="text-align:center; font-size:0.85rem; color:var(--muted); margin-bottom:16px;">
-          <%= date === today ? 'Today · ' : '' %><%= formatDateDisplay(date) %>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <h2><span class="shift-badge"><%= selectedShift.name %></span></h2>
-            <span style="color:var(--muted); font-size:0.82rem;"><%= extraTasks.length %> extra</span>
-          </div>
-
-          <div class="alert alert-info" style="margin-bottom:14px;">
-            Extra tasks for this day are added to the bottom of the standing list. The standing list is always shown first.
-          </div>
-
-          <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/add-extra"
-                style="display:flex; gap:8px; margin-bottom:14px;">
-            <input type="text" name="name" placeholder="Add an extra task for this day…"
-                   required autofocus autocomplete="off" style="flex:1;">
-            <button type="submit" class="btn btn-primary btn-sm">Add</button>
-          </form>
-
-          <% if (extraTasks.length > 0) { %>
-            <div class="task-edit-list"
-                 data-reorder-url="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/reorder-extra">
-              <% extraTasks.forEach(function(task, idx) { %>
-                <div class="task-row" draggable="true" data-id="<%= task.id %>">
-                  <span class="drag-handle" title="Drag to reorder">⠿</span>
-                  <span class="task-num"><%= idx + 1 %>.</span>
+        <!-- ─────────────────── TODAY'S EXTRA TASKS ─────────────────── -->
+        <% if (todayExtraTasks.length > 0) { %>
+          <div class="panel" style="margin-bottom:14px;">
+            <div class="panel-header">
+              <h2 style="font-size:1rem;">Today-only extras · <span class="shift-badge" style="font-size:0.78rem;"><%= selectedShift.name %></span></h2>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <% todayExtraTasks.forEach(function(task) { %>
+                <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border);">
                   <span style="flex:1; font-size:0.9rem;"><%= task.task_name %></span>
-                  <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= date %>/remove-extra/<%= task.id %>"
-                        onsubmit="return confirm('Remove this extra task?')" style="flex-shrink:0;">
+                  <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= today %>/remove-extra/<%= task.id %>"
+                        onsubmit="return confirm('Remove this extra task for today?')" style="flex-shrink:0;">
                     <button type="submit" class="btn btn-danger btn-sm">✕</button>
                   </form>
                 </div>
               <% }); %>
             </div>
-          <% } else { %>
-            <p style="color:var(--muted); font-size:0.88rem;">No extra tasks for this day yet.</p>
-          <% } %>
-        </div>
+          </div>
+        <% } %>
       <% } %>
 
-      <!-- Add / remove shift types -->
+      <!-- ─────────────────── MANAGE SHIFTS ─────────────────── -->
       <div class="panel">
         <div class="panel-header"><h2 style="font-size:1rem;">Manage shifts</h2></div>
         <form method="POST" action="/admin/shifts/add" style="display:flex; gap:8px; margin-bottom:12px;">
@@ -152,7 +159,7 @@
           <% shifts.forEach(function(s) { %>
             <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border);">
               <span style="flex:1; font-size:0.9rem;"><%= s.name %></span>
-              <form method="POST" action="/admin/shifts/delete/<%= s.id %>" onsubmit="return confirm('Delete the <%= s.name %> shift and its checklist?')">
+              <form method="POST" action="/admin/shifts/delete/<%= s.id %>" onsubmit="return confirm('Delete the <%= s.name %> shift and its entire checklist?')">
                 <button type="submit" class="btn btn-danger btn-sm">✕</button>
               </form>
             </div>
@@ -165,13 +172,44 @@
   <div id="saveToast" class="save-toast toast-hidden" aria-live="polite"></div>
 
   <script>
-    function goToDate() {
-      const d = document.getElementById('datePicker').value;
-      if (d) window.location.href = '/admin/shifts?shift=<%= selectedShift ? selectedShift.id : '' %>&date=' + d;
-    }
-
     (function () {
-      // ── Unsaved-edit guard ───────────────────────────────────────────────────
+      // ── Add a Task form: show/hide date selector + validation ─────────────────
+      var typeRadios = document.querySelectorAll('input[name="type"]');
+      var dateSelector = document.getElementById('dateSelector');
+      var dateChoiceRadios = document.querySelectorAll('input[name="dateChoice"]');
+      var addTaskDate = document.getElementById('addTaskDate');
+      var addForm = document.getElementById('addTaskForm');
+      var todayStr = '<%= today %>';
+
+      typeRadios.forEach(function(radio) {
+        radio.addEventListener('change', function() {
+          if (dateSelector) dateSelector.style.display = this.value === 'oneoff' ? 'block' : 'none';
+        });
+      });
+
+      dateChoiceRadios.forEach(function(radio) {
+        radio.addEventListener('change', function() {
+          if (!addTaskDate) return;
+          if (this.value === 'today') {
+            addTaskDate.value = todayStr;
+            addTaskDate.style.display = 'none';
+          } else {
+            addTaskDate.style.display = 'inline-block';
+          }
+        });
+      });
+
+      if (addForm) {
+        addForm.addEventListener('submit', function(e) {
+          var checked = addForm.querySelectorAll('input[name="shiftIds"]:checked');
+          if (checked.length === 0) {
+            e.preventDefault();
+            alert('Please select at least one shift.');
+          }
+        });
+      }
+
+      // ── Unsaved-edit guard ──────────────────────────────────────────────────
       var dirtyField = null;
 
       function markDirty(span) {
@@ -184,14 +222,11 @@
         span.classList.remove('task-edit-name--dirty');
       }
 
-      window.addEventListener('beforeunload', function (e) {
-        if (dirtyField) {
-          e.preventDefault();
-          e.returnValue = '';
-        }
+      window.addEventListener('beforeunload', function(e) {
+        if (dirtyField) { e.preventDefault(); e.returnValue = ''; }
       });
 
-      // ── Feedback helpers ─────────────────────────────────────────────────────
+      // ── Feedback helpers ────────────────────────────────────────────────────
       var toastTimer = null;
       function showToast(msg, isError) {
         var toast = document.getElementById('saveToast');
@@ -199,7 +234,7 @@
         toast.textContent = msg;
         toast.className = 'save-toast' + (isError ? ' toast-error' : '');
         if (toastTimer) clearTimeout(toastTimer);
-        toastTimer = setTimeout(function () { toast.classList.add('toast-hidden'); }, 3000);
+        toastTimer = setTimeout(function() { toast.classList.add('toast-hidden'); }, 3000);
       }
 
       function flashRow(rowEl) {
@@ -207,19 +242,19 @@
         rowEl.classList.remove('row-saved');
         void rowEl.offsetWidth;
         rowEl.classList.add('row-saved');
-        setTimeout(function () { rowEl.classList.remove('row-saved'); }, 1200);
+        setTimeout(function() { rowEl.classList.remove('row-saved'); }, 1200);
       }
 
       function flashList(listEl) {
         listEl.classList.remove('list-saved');
         void listEl.offsetWidth;
         listEl.classList.add('list-saved');
-        setTimeout(function () { listEl.classList.remove('list-saved'); }, 1200);
+        setTimeout(function() { listEl.classList.remove('list-saved'); }, 1200);
       }
 
       // ── Helpers ─────────────────────────────────────────────────────────────
       function refreshNums(list) {
-        list.querySelectorAll('.task-row').forEach(function (row, i) {
+        list.querySelectorAll('.task-row').forEach(function(row, i) {
           var n = row.querySelector('.task-num');
           if (n) n.textContent = (i + 1) + '.';
         });
@@ -227,17 +262,17 @@
 
       function saveOrder(list, url) {
         refreshNums(list);
-        var ids = Array.from(list.querySelectorAll('.task-row')).map(function (r) {
+        var ids = Array.from(list.querySelectorAll('.task-row')).map(function(r) {
           return Number(r.dataset.id);
         });
         fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ids: ids }),
-        }).then(function (r) {
+        }).then(function(r) {
           if (r.ok) { flashList(list); }
           else { showToast('Failed to save order — try again', true); }
-        }).catch(function () { showToast('Failed to save order — check your connection', true); });
+        }).catch(function() { showToast('Failed to save order — check your connection', true); });
       }
 
       // ── Inline edit ─────────────────────────────────────────────────────────
@@ -245,7 +280,7 @@
         var original = span.textContent.trim();
         var row = span.closest('[data-id]');
 
-        span.addEventListener('focus', function () {
+        span.addEventListener('focus', function() {
           if (row) row.setAttribute('draggable', 'false');
           var range = document.createRange();
           var sel = window.getSelection();
@@ -255,11 +290,9 @@
           sel.addRange(range);
         });
 
-        span.addEventListener('input', function () {
-          markDirty(span);
-        });
+        span.addEventListener('input', function() { markDirty(span); });
 
-        span.addEventListener('blur', function () {
+        span.addEventListener('blur', function() {
           if (row) row.setAttribute('draggable', 'true');
           var val = span.textContent.trim();
           if (!val) { span.textContent = original; clearDirty(span); return; }
@@ -268,18 +301,18 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: val }),
-          }).then(function (r) {
+          }).then(function(r) {
             if (r.ok) { original = val; clearDirty(span); flashRow(row); }
             else { span.textContent = original; clearDirty(span); showToast('Failed to rename — try again', true); }
-          }).catch(function () { span.textContent = original; clearDirty(span); showToast('Failed to rename — check your connection', true); });
+          }).catch(function() { span.textContent = original; clearDirty(span); showToast('Failed to rename — check your connection', true); });
         });
 
-        span.addEventListener('keydown', function (e) {
+        span.addEventListener('keydown', function(e) {
           if (e.key === 'Enter') { e.preventDefault(); span.blur(); }
           if (e.key === 'Escape') { span.textContent = original; clearDirty(span); span.blur(); }
         });
 
-        span.addEventListener('paste', function (e) {
+        span.addEventListener('paste', function(e) {
           e.preventDefault();
           var text = e.clipboardData.getData('text/plain').replace(/\n/g, ' ');
           document.execCommand('insertText', false, text);
@@ -292,21 +325,21 @@
         var dragging = null;
         var overEl = null;
 
-        list.addEventListener('dragstart', function (e) {
+        list.addEventListener('dragstart', function(e) {
           dragging = e.target.closest('.task-row');
           if (!dragging) return;
           e.dataTransfer.effectAllowed = 'move';
-          setTimeout(function () { if (dragging) dragging.classList.add('is-dragging'); }, 0);
+          setTimeout(function() { if (dragging) dragging.classList.add('is-dragging'); }, 0);
         });
 
-        list.addEventListener('dragend', function () {
+        list.addEventListener('dragend', function() {
           if (dragging) dragging.classList.remove('is-dragging');
           if (overEl) { overEl.classList.remove('drag-over-top', 'drag-over-bottom'); }
           dragging = null;
           overEl = null;
         });
 
-        list.addEventListener('dragover', function (e) {
+        list.addEventListener('dragover', function(e) {
           e.preventDefault();
           var target = e.target.closest('.task-row');
           if (!target || target === dragging) return;
@@ -314,22 +347,20 @@
           overEl = target;
           var rect = target.getBoundingClientRect();
           if (e.clientY < rect.top + rect.height / 2) {
-            target.classList.add('drag-over-top');
-            target.classList.remove('drag-over-bottom');
+            target.classList.add('drag-over-top'); target.classList.remove('drag-over-bottom');
           } else {
-            target.classList.add('drag-over-bottom');
-            target.classList.remove('drag-over-top');
+            target.classList.add('drag-over-bottom'); target.classList.remove('drag-over-top');
           }
         });
 
-        list.addEventListener('dragleave', function (e) {
+        list.addEventListener('dragleave', function(e) {
           if (!list.contains(e.relatedTarget) && overEl) {
             overEl.classList.remove('drag-over-top', 'drag-over-bottom');
             overEl = null;
           }
         });
 
-        list.addEventListener('drop', function (e) {
+        list.addEventListener('drop', function(e) {
           e.preventDefault();
           var target = e.target.closest('.task-row');
           if (overEl) overEl.classList.remove('drag-over-top', 'drag-over-bottom');
@@ -376,8 +407,8 @@
           dragEl = null;
         }
 
-        list.querySelectorAll('.drag-handle').forEach(function (handle) {
-          handle.addEventListener('touchstart', function () {
+        list.querySelectorAll('.drag-handle').forEach(function(handle) {
+          handle.addEventListener('touchstart', function() {
             dragEl = handle.closest('.task-row');
             if (!dragEl) return;
             dragEl.classList.add('is-dragging');
@@ -388,170 +419,8 @@
         });
       }
 
-      // ── Standing-list add form (fetch + DOM insertion) ───────────────────────
-      (function () {
-        var addForm = document.getElementById('standingAddForm');
-        if (!addForm) return;
-
-        var shiftId = '<%= selectedShift ? selectedShift.id : "" %>';
-        var reorderUrl = '/admin/shifts/' + shiftId + '/standing/reorder';
-
-        addForm.addEventListener('submit', function (e) {
-          e.preventDefault();
-          var input = addForm.querySelector('input[name="name"]');
-          var name = input.value.trim();
-          if (!name) return;
-
-          var btn = addForm.querySelector('button[type="submit"]');
-          btn.disabled = true;
-
-          fetch(addForm.action, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Accept': 'application/json',
-            },
-            body: 'name=' + encodeURIComponent(name),
-          })
-          .then(function (r) {
-            if (!r.ok) throw new Error('bad response');
-            return r.json();
-          })
-          .then(function (data) {
-            input.value = '';
-            input.focus();
-            btn.disabled = false;
-
-            var panel = addForm.closest('.panel');
-
-            // If task already existed in shift, just flash the existing row
-            if (!data.created) {
-              var existingRow = panel ? panel.querySelector('.task-row[data-id="' + data.id + '"]') : null;
-              if (existingRow) { flashRow(existingRow); }
-              showToast('Task already in list');
-              return;
-            }
-
-            // Ensure the task-edit-list container exists
-            var list = panel ? panel.querySelector('.task-edit-list') : null;
-            var emptyMsg = panel ? panel.querySelector('.standing-empty') : null;
-
-            if (!list) {
-              // First task — remove empty message and create list
-              if (emptyMsg) emptyMsg.remove();
-              list = document.createElement('div');
-              list.className = 'task-edit-list';
-              list.dataset.reorderUrl = reorderUrl;
-              panel.appendChild(list);
-              initDragList(list);
-            }
-
-            var idx = list.querySelectorAll('.task-row').length + 1;
-
-            // Build the new row
-            var row = document.createElement('div');
-            row.className = 'task-row';
-            row.draggable = true;
-            row.dataset.id = String(data.id);
-
-            var handle = document.createElement('span');
-            handle.className = 'drag-handle';
-            handle.title = 'Drag to reorder';
-            handle.textContent = '⠿';
-
-            var num = document.createElement('span');
-            num.className = 'task-num';
-            num.textContent = idx + '.';
-
-            var nameSpan = document.createElement('span');
-            nameSpan.className = 'task-edit-name';
-            nameSpan.contentEditable = 'true';
-            nameSpan.spellcheck = false;
-            nameSpan.dataset.renameUrl = '/admin/shifts/' + shiftId + '/standing/rename/' + data.id;
-            nameSpan.textContent = data.name;
-
-            var removeForm = document.createElement('form');
-            removeForm.method = 'POST';
-            removeForm.action = '/admin/shifts/' + shiftId + '/standing/remove/' + data.id;
-            removeForm.style.flexShrink = '0';
-            removeForm.addEventListener('submit', function (ev) {
-              if (!confirm('Remove this task?')) ev.preventDefault();
-            });
-
-            var removeBtn = document.createElement('button');
-            removeBtn.type = 'submit';
-            removeBtn.className = 'btn btn-danger btn-sm';
-            removeBtn.textContent = '✕';
-            removeForm.appendChild(removeBtn);
-
-            row.appendChild(handle);
-            row.appendChild(num);
-            row.appendChild(nameSpan);
-            row.appendChild(removeForm);
-
-            list.appendChild(row);
-            initEditable(nameSpan);
-
-            // Wire up touch drag for the new handle by re-attaching touch listeners
-            // (initTouchDrag only runs over handles that existed at init time)
-            (function () {
-              var dragEl = null;
-              var touchHandle = row.querySelector('.drag-handle');
-              if (!touchHandle) return;
-              function onMove(e) {
-                if (!dragEl) return;
-                e.preventDefault();
-                var touch = e.touches[0];
-                dragEl.style.visibility = 'hidden';
-                var below = document.elementFromPoint(touch.clientX, touch.clientY);
-                dragEl.style.visibility = '';
-                if (!below) return;
-                var target = below.closest ? below.closest('.task-row') : null;
-                if (!target || target === dragEl || !list.contains(target)) return;
-                var rect = target.getBoundingClientRect();
-                var before = touch.clientY < rect.top + rect.height / 2;
-                list.insertBefore(dragEl, before ? target : target.nextSibling);
-                refreshNums(list);
-              }
-              function onEnd() {
-                if (!dragEl) return;
-                dragEl.classList.remove('is-dragging');
-                document.removeEventListener('touchmove', onMove);
-                document.removeEventListener('touchend', onEnd);
-                document.removeEventListener('touchcancel', onEnd);
-                var url = list.dataset.reorderUrl;
-                if (url) saveOrder(list, url);
-                dragEl = null;
-              }
-              touchHandle.addEventListener('touchstart', function () {
-                dragEl = row;
-                dragEl.classList.add('is-dragging');
-                document.addEventListener('touchmove', onMove, { passive: false });
-                document.addEventListener('touchend', onEnd, { passive: true });
-                document.addEventListener('touchcancel', onEnd, { passive: true });
-              }, { passive: true });
-            })();
-
-            // Flash the new row
-            flashRow(row);
-            showToast('Task added');
-
-            // Update task count in panel header
-            var countEl = panel ? panel.querySelector('.panel-header [data-task-count]') : null;
-            if (countEl) {
-              var newCount = list.querySelectorAll('.task-row').length;
-              countEl.textContent = newCount + ' task' + (newCount === 1 ? '' : 's');
-            }
-          })
-          .catch(function () {
-            btn.disabled = false;
-            showToast('Failed to add task — try again', true);
-          });
-        });
-      })();
-
-      // ── Init ──────────────────────────────────────────────────────────────────
-      document.querySelectorAll('.task-edit-list').forEach(function (list) {
+      // ── Init ────────────────────────────────────────────────────────────────
+      document.querySelectorAll('.task-edit-list').forEach(function(list) {
         initDragList(list);
         list.querySelectorAll('.task-edit-name').forEach(initEditable);
       });

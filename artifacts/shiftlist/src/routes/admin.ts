@@ -8,12 +8,6 @@ const router = Router();
 router.use(ensureAdminAuth);
 
 // ════════════════════════════════════ Helpers ═══════════════════════════════════
-function getOffsetDate(dateStr: string, days: number): string {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
-}
-
 /** Run fn inside a BEGIN/COMMIT transaction; rolls back on error. */
 async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
@@ -41,18 +35,14 @@ async function upsertTaskByName(client: PoolClient, name: string): Promise<numbe
   return res.rows[0].id as number;
 }
 
-/** Build the redirect URL back to the shifts hub, preserving shift + optional day. */
-function hubUrl(shiftId: number | string, date?: string): string {
-  const base = `/admin/shifts?shift=${shiftId}`;
-  return date ? `${base}&date=${date}` : base;
+/** Build the redirect URL back to the shifts hub, preserving shift. */
+function hubUrl(shiftId: number | string): string {
+  return `/admin/shifts?shift=${shiftId}`;
 }
 
 /**
  * Renormalize a list of task rows to display_order 0, 1, 2, … in a single
- * UPDATE … FROM (VALUES …) statement. A single-statement update allows
- * PostgreSQL to resolve temporary intra-statement uniqueness conflicts, so
- * the (shift_id/daily_shift_id, display_order) unique constraint is never
- * violated even during a reorder.
+ * UPDATE … FROM (VALUES …) statement.
  */
 async function bulkRenormalizeOrder(
   client: PoolClient,
@@ -137,9 +127,8 @@ router.post("/employees/delete/:id", async (req, res) => {
 });
 
 // ════════════════════════════════════ Shifts hub ════════════════════════════════
-// One screen to build a shift's standing checklist (always live) and optionally
-// add extra tasks for a specific day.
 router.get("/shifts", async (req, res) => {
+  const today = getTodayStr();
   const shifts = (await pool.query(
     `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
   )).rows;
@@ -148,36 +137,31 @@ router.get("/shifts", async (req, res) => {
   const selectedShift =
     shifts.find((s: { id: number }) => s.id === requestedShift) || shifts[0] || null;
 
-  // Autocomplete suggestions from the reusable task library.
   const allTasks = (await pool.query("SELECT * FROM tasks ORDER BY name")).rows;
 
-  // Standing list for the selected shift.
   let standingTasks: { id: number; task_name: string; display_order: number }[] = [];
+  let todayExtraTasks: { id: number; task_name: string; display_order: number }[] = [];
+
   if (selectedShift) {
-    standingTasks = (await pool.query(
-      `SELECT st.id, st.display_order, t.name as task_name
-       FROM shift_tasks st
-       JOIN tasks t ON t.id = st.task_id
-       WHERE st.shift_id = $1
-       ORDER BY st.display_order`,
-      [selectedShift.id]
-    )).rows;
-  }
-
-  // Day mode (optional): adding extra tasks for a specific date.
-  const rawDate = req.query.date as string | undefined;
-  const dayMode = !!rawDate;
-  const date = rawDate || getTodayStr();
-  let extraTasks: { id: number; task_name: string; display_order: number }[] = [];
-
-  if (selectedShift && dayMode) {
-    extraTasks = (await pool.query(
-      `SELECT id, task_name, display_order
-       FROM extra_day_tasks
-       WHERE shift_id = $1 AND date = $2
-       ORDER BY display_order`,
-      [selectedShift.id, date]
-    )).rows;
+    const [stRes, etRes] = await Promise.all([
+      pool.query(
+        `SELECT st.id, st.display_order, t.name as task_name
+         FROM shift_tasks st
+         JOIN tasks t ON t.id = st.task_id
+         WHERE st.shift_id = $1
+         ORDER BY st.display_order`,
+        [selectedShift.id]
+      ),
+      pool.query(
+        `SELECT id, task_name, display_order
+         FROM extra_day_tasks
+         WHERE shift_id = $1 AND date = $2
+         ORDER BY display_order`,
+        [selectedShift.id, today]
+      ),
+    ]);
+    standingTasks = stRes.rows;
+    todayExtraTasks = etRes.rows;
   }
 
   res.render("admin/shifts", {
@@ -185,14 +169,68 @@ router.get("/shifts", async (req, res) => {
     selectedShift,
     allTasks,
     standingTasks,
-    dayMode,
-    date,
-    today: getTodayStr(),
-    prevDate: getOffsetDate(date, -1),
-    nextDate: getOffsetDate(date, 1),
-    extraTasks,
+    todayExtraTasks,
+    today,
     formatDateDisplay,
   });
+});
+
+// ── Add a Task (unified: daily → standing list, one-off → extra day tasks) ────
+router.post("/shifts/add-task", async (req, res) => {
+  const body = req.body as {
+    name?: string;
+    type?: string;
+    shiftIds?: string | string[];
+    date?: string;
+  };
+
+  const name = body.name?.trim();
+  if (!name) return void res.redirect("/admin/shifts");
+
+  const type = body.type === "daily" ? "daily" : "oneoff";
+  const rawIds = Array.isArray(body.shiftIds)
+    ? body.shiftIds
+    : body.shiftIds
+    ? [body.shiftIds]
+    : [];
+  const shiftIds = rawIds.map(Number).filter((n) => n > 0);
+  const date = body.date?.trim() || getTodayStr();
+
+  if (shiftIds.length === 0) return void res.redirect("/admin/shifts");
+
+  if (type === "daily") {
+    await withTransaction(async (client) => {
+      const taskId = await upsertTaskByName(client, name);
+      for (const shiftId of shiftIds) {
+        const maxRow = (
+          await client.query(
+            "SELECT COALESCE(MAX(display_order), -1) as max FROM shift_tasks WHERE shift_id = $1",
+            [shiftId]
+          )
+        ).rows[0];
+        await client.query(
+          `INSERT INTO shift_tasks (shift_id, task_id, display_order) VALUES ($1, $2, $3)
+           ON CONFLICT (shift_id, task_id) DO NOTHING`,
+          [shiftId, taskId, (maxRow.max as number) + 1]
+        );
+      }
+    });
+  } else {
+    for (const shiftId of shiftIds) {
+      const maxRow = (
+        await pool.query(
+          "SELECT COALESCE(MAX(display_order), -1) as max FROM extra_day_tasks WHERE shift_id = $1 AND date = $2",
+          [shiftId, date]
+        )
+      ).rows[0];
+      await pool.query(
+        "INSERT INTO extra_day_tasks (shift_id, date, task_name, display_order) VALUES ($1, $2, $3, $4)",
+        [shiftId, date, name, (maxRow.max as number) + 1]
+      );
+    }
+  }
+
+  res.redirect(shiftIds.length === 1 ? hubUrl(shiftIds[0]) : "/admin/shifts");
 });
 
 // ── Shift types ──────────────────────────────────────────────────────────────
@@ -241,7 +279,6 @@ router.post("/shifts/:shiftId/standing/add", async (req, res) => {
         shiftTaskId = inserted.rows[0].id;
         created = true;
       } else {
-        // Task already exists in this shift — look up the existing shift_task id
         const existing = await client.query(
           "SELECT id FROM shift_tasks WHERE shift_id = $1 AND task_id = $2",
           [shiftId, taskId]
@@ -297,28 +334,9 @@ router.post("/shifts/:shiftId/standing/reorder", async (req, res) => {
 });
 
 // ── Extra tasks for a specific day ──────────────────────────────────────────
-router.post("/shifts/:shiftId/day/:date/add-extra", async (req, res) => {
-  const shiftId = Number(req.params.shiftId);
-  const { date } = req.params;
-  const name = (req.body.name as string)?.trim();
-
-  if (name) {
-    const maxRow = (await pool.query(
-      "SELECT COALESCE(MAX(display_order), -1) as max FROM extra_day_tasks WHERE shift_id = $1 AND date = $2",
-      [shiftId, date]
-    )).rows[0];
-    await pool.query(
-      "INSERT INTO extra_day_tasks (shift_id, date, task_name, display_order) VALUES ($1, $2, $3, $4)",
-      [shiftId, date, name, (maxRow.max as number) + 1]
-    );
-  }
-
-  res.redirect(hubUrl(shiftId, date));
-});
-
 router.post("/shifts/:shiftId/day/:date/remove-extra/:id", async (req, res) => {
   await pool.query("DELETE FROM extra_day_tasks WHERE id = $1", [Number(req.params.id)]);
-  res.redirect(hubUrl(req.params.shiftId, req.params.date));
+  res.redirect(hubUrl(req.params.shiftId));
 });
 
 router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {
@@ -335,6 +353,77 @@ router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {
     await bulkRenormalizeOrder(client, "extra_day_tasks", idArray);
   });
   res.json({ ok: true });
+});
+
+// ════════════════════════════════════ Live Status ════════════════════════════
+router.get("/live", async (_req, res) => {
+  const today = getTodayStr();
+  const shifts = (await pool.query(
+    `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
+  )).rows as { id: number; name: string }[];
+
+  const shiftData = await Promise.all(
+    shifts.map(async (shift) => {
+      const [standingRes, extraRes, compRes] = await Promise.all([
+        pool.query(
+          `SELECT t.name as task_name FROM shift_tasks st
+           JOIN tasks t ON t.id = st.task_id
+           WHERE st.shift_id = $1 ORDER BY st.display_order`,
+          [shift.id]
+        ),
+        pool.query(
+          `SELECT task_name FROM extra_day_tasks
+           WHERE shift_id = $1 AND date = $2 ORDER BY display_order`,
+          [shift.id, today]
+        ),
+        pool.query(
+          `SELECT task_name, completed_by_name, completed_at
+           FROM task_completions WHERE date = $1 AND shift_id = $2`,
+          [today, shift.id]
+        ),
+      ]);
+
+      const compMap = new Map<string, { by: string; at: string }>();
+      for (const row of compRes.rows as {
+        task_name: string;
+        completed_by_name: string;
+        completed_at: Date | string;
+      }[]) {
+        compMap.set(row.task_name, {
+          by: row.completed_by_name,
+          at:
+            row.completed_at instanceof Date
+              ? row.completed_at.toISOString()
+              : String(row.completed_at),
+        });
+      }
+
+      const tasks = [
+        ...(standingRes.rows as { task_name: string }[]).map((r) => ({
+          name: r.task_name,
+          isExtra: false,
+        })),
+        ...(extraRes.rows as { task_name: string }[]).map((r) => ({
+          name: r.task_name,
+          isExtra: true,
+        })),
+      ].map((t) => {
+        const c = compMap.get(t.name);
+        return {
+          name: t.name,
+          isExtra: t.isExtra,
+          completed: !!c,
+          completedBy: c?.by ?? null,
+          completedAtIso: c?.at ?? null,
+        };
+      });
+
+      const done = tasks.filter((t) => t.completed).length;
+      return { shift, tasks, done, total: tasks.length };
+    })
+  );
+
+  res.render("admin/live", { shiftData, today, formatDateDisplay });
 });
 
 // ════════════════════════════════════ Reports ═════════════════════════════════

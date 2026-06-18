@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Live Status</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'live' }) %>
+  <div class="main-content">
+    <div class="page-header" style="margin-top:12px; display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+      <div>
+        <h1>Live Status</h1>
+        <p><%= formatDateDisplay(today) %> — real-time completion view</p>
+      </div>
+      <span id="refreshCountdown" style="font-size:0.8rem; color:var(--muted); padding-top:4px;"></span>
+    </div>
+
+    <% if (shiftData.length === 0) { %>
+      <div class="panel">
+        <p style="color:var(--muted); font-size:0.9rem;">No shifts set up yet. <a href="/admin/shifts">Create one</a>.</p>
+      </div>
+    <% } %>
+
+    <div style="display:grid; gap:16px;">
+      <% shiftData.forEach(function(sd) { %>
+        <div class="panel">
+          <div class="panel-header" style="margin-bottom:12px;">
+            <h2><span class="shift-badge"><%= sd.shift.name %></span></h2>
+            <% if (sd.total > 0) { %>
+              <span style="font-size:0.9rem; color:var(--muted);"><%= sd.done %>/<%= sd.total %> done</span>
+            <% } %>
+          </div>
+
+          <% if (sd.total === 0) { %>
+            <p style="color:var(--muted); font-size:0.88rem;">No tasks set up for this shift.</p>
+          <% } else { %>
+            <% var pct = Math.round(sd.done / sd.total * 100); %>
+            <div class="progress-bar-wrap" style="margin-bottom:14px;">
+              <div class="progress-bar-fill" style="width:<%= pct %>%"></div>
+            </div>
+
+            <ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;">
+              <% var firstExtra = true; %>
+              <% sd.tasks.forEach(function(task) { %>
+                <% if (task.isExtra && firstExtra) { firstExtra = false; %>
+                  <li style="list-style:none; padding:6px 0 2px; text-align:center;">
+                    <span style="font-size:0.72rem; font-weight:700; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase;">— Today only —</span>
+                  </li>
+                <% } %>
+                <li style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
+                  <% if (task.completed) { %>
+                    <span style="width:22px; height:22px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-size:0.78rem; color:#fff; flex-shrink:0; font-weight:700;">✓</span>
+                  <% } else { %>
+                    <span style="width:22px; height:22px; border-radius:50%; border:2px solid var(--border); flex-shrink:0;"></span>
+                  <% } %>
+                  <span style="flex:1; font-size:0.9rem;<%= task.completed ? ' color:var(--muted); text-decoration:line-through;' : '' %>"><%= task.name %></span>
+                  <% if (task.completed) { %>
+                    <span style="font-size:0.78rem; color:var(--muted); white-space:nowrap; text-align:right;">
+                      <%= task.completedBy %>
+                      <% if (task.completedAtIso) { %>
+                        &middot; <span class="live-ts" data-ts="<%= task.completedAtIso %>"></span>
+                      <% } %>
+                    </span>
+                  <% } else { %>
+                    <span style="font-size:0.75rem; color:var(--muted); opacity:0.6;">pending</span>
+                  <% } %>
+                </li>
+              <% }); %>
+            </ul>
+          <% } %>
+        </div>
+      <% }); %>
+    </div>
+  </div>
+
+  <script>
+    // Format timestamps in browser's local timezone
+    document.querySelectorAll('.live-ts').forEach(function(el) {
+      var ts = el.dataset.ts;
+      if (ts) el.textContent = new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    });
+
+    // Auto-refresh with countdown
+    var seconds = 30;
+    var el = document.getElementById('refreshCountdown');
+    function tick() {
+      if (el) el.textContent = 'Refreshes in ' + seconds + 's';
+      if (seconds === 0) { window.location.reload(); return; }
+      seconds--;
+      setTimeout(tick, 1000);
+    }
+    tick();
+  </script>
+</body>
+</html>
