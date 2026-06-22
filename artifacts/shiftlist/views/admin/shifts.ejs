@@ -648,6 +648,11 @@
 
       document.querySelectorAll('.task-time-toggle').forEach(initTimeToggle);
 
+      // Prevent clicks inside a panel from bubbling up to the close-all handler
+      document.querySelectorAll('.task-time-panel').forEach(function(panel) {
+        panel.addEventListener('click', function(e) { e.stopPropagation(); });
+      });
+
       // Close time panels when clicking elsewhere
       document.addEventListener('click', function() {
         document.querySelectorAll('.task-time-panel.open').forEach(function(p) {
