@@ -22,4 +22,7 @@ ALTER TABLE shift_tasks     ADD COLUMN IF NOT EXISTS time_end   TEXT;
 ALTER TABLE extra_day_tasks ADD COLUMN IF NOT EXISTS time_start TEXT;
 ALTER TABLE extra_day_tasks ADD COLUMN IF NOT EXISTS time_end   TEXT;
 ALTER TABLE task_completions ADD COLUMN IF NOT EXISTS late_reason TEXT;
+
+-- Add auto_submitted flag to submissions (idempotent)
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS auto_submitted BOOLEAN NOT NULL DEFAULT FALSE;
 SQL

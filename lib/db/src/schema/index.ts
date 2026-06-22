@@ -78,6 +78,7 @@ export const submissions = pgTable("submissions", {
   date: text("date").notNull(),
   taskSummary: text("task_summary").notNull(),
   notes: text("notes").notNull().default(""),
+  autoSubmitted: boolean("auto_submitted").notNull().default(false),
 });
 
 export type Submission = typeof submissions.$inferSelect;

@@ -91,8 +91,8 @@ export async function sweepStaleSessions(): Promise<void> {
         // inserting a duplicate if a real submission already exists.
         await pool.query(
           `INSERT INTO submissions
-             (employee_code, employee_name, shift_name, date, task_summary, notes)
-           SELECT '', $1, $2, $3, $4, $5
+             (employee_code, employee_name, shift_name, date, task_summary, notes, auto_submitted)
+           SELECT '', $1, $2, $3, $4, $5, TRUE
            WHERE NOT EXISTS (
              SELECT 1 FROM submissions
              WHERE employee_name = $1

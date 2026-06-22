@@ -45,6 +45,9 @@
                     <span class="report-employee"><%= row.employee_name || '—' %></span>
                     <span class="report-time">
                       <%= row.submitted_at ? formatLocalTime(row.submitted_at) : '—' %>
+                      <% if (row.auto_submitted) { %>
+                        <span style="display:inline-block; margin-left:6px; padding:1px 6px; background:#7a5c00; color:#ffd97d; border-radius:4px; font-size:0.72rem; font-weight:600; letter-spacing:0.03em; vertical-align:middle;" title="Auto-submitted by system — staff did not close their shift" aria-label="Auto-submitted">Auto</span>
+                      <% } %>
                     </span>
                   </div>
 
