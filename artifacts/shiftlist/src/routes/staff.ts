@@ -3,10 +3,12 @@ import { pool } from "../db/index.js";
 import { ensureStaffAuth } from "../middleware/auth.js";
 import { getTodayStr } from "../utils/dateHelpers.js";
 import { logger } from "../lib/logger.js";
+import { sweepStaleSessions } from "../utils/autoSubmit.js";
 
 const router = Router();
 
 router.get("/tasks", ensureStaffAuth, async (req, res) => {
+  void sweepStaleSessions().catch(() => {});
   const today = getTodayStr();
   const shiftId = req.session.selectedShiftId;
 

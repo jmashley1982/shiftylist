@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { pool } from "../db/index.js";
 import { ensureAdminAuth } from "../middleware/auth.js";
 import { getTodayStr, formatDateDisplay, formatLocalTime } from "../utils/dateHelpers.js";
+import { sweepStaleSessions } from "../utils/autoSubmit.js";
 
 const router = Router();
 router.use(ensureAdminAuth);
@@ -495,6 +496,7 @@ async function fetchLiveData(today: string): Promise<LiveData> {
 }
 
 router.get("/live", async (_req, res) => {
+  void sweepStaleSessions().catch(() => {});
   const today = getTodayStr();
   const { shiftData, activeSessions } = await fetchLiveData(today);
   res.render("admin/live", { shiftData, activeSessions, today, formatDateDisplay });
@@ -508,6 +510,7 @@ router.get("/live/data", async (_req, res) => {
 
 // ════════════════════════════════════ Reports ═════════════════════════════════
 router.get("/reports", async (req, res) => {
+  void sweepStaleSessions().catch(() => {});
   try {
     await Promise.all([
       pool.query("DELETE FROM submissions WHERE submitted_at < NOW() - INTERVAL '30 days'"),
