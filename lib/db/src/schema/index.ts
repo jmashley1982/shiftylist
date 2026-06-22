@@ -32,6 +32,8 @@ export const shiftTasks = pgTable("shift_tasks", {
   shiftId: integer("shift_id").notNull().references(() => shifts.id, { onDelete: "cascade" }),
   taskId: integer("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
   displayOrder: integer("display_order").default(0).notNull(),
+  timeStart: text("time_start"),
+  timeEnd: text("time_end"),
 }, (table) => [
   unique().on(table.shiftId, table.taskId),
 ]);
@@ -45,6 +47,8 @@ export const extraDayTasks = pgTable("extra_day_tasks", {
   date: text("date").notNull(),
   taskName: text("task_name").notNull(),
   displayOrder: integer("display_order").default(0).notNull(),
+  timeStart: text("time_start"),
+  timeEnd: text("time_end"),
 });
 
 export const insertExtraDayTaskSchema = createInsertSchema(extraDayTasks).omit({ id: true });
@@ -88,6 +92,7 @@ export const taskCompletions = pgTable("task_completions", {
   completedAt: timestamp("completed_at", { withTimezone: true }).defaultNow().notNull(),
   completedByName: text("completed_by_name").notNull(),
   completedByCode: text("completed_by_code").notNull(),
+  lateReason: text("late_reason"),
 }, (table) => [
   unique().on(table.date, table.shiftId, table.taskName),
 ]);

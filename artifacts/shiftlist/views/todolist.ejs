@@ -40,6 +40,7 @@
         <li class="task-item" id="task-<%= idx %>" onclick="toggleTask(<%= idx %>)">
           <div class="task-checkbox" id="cb-<%= idx %>"></div>
           <span class="task-text" id="text-<%= idx %>"><%= task.text %></span>
+          <span class="task-window-badge" id="win-<%= idx %>"></span>
           <span class="task-time" id="time-<%= idx %>"></span>
         </li>
       <% }); %>
@@ -83,11 +84,38 @@
     </div>
   </div>
 
+  <!-- Late check-off modal -->
+  <div id="lateModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:200; align-items:center; justify-content:center;">
+    <div style="background:var(--card); border-radius:12px; padding:24px; max-width:340px; width:90%; box-shadow:var(--shadow-lg); text-align:center; border:1px solid var(--border);">
+      <div style="font-size:2rem; margin-bottom:8px;">🕐</div>
+      <h2 style="font-size:1.1rem; margin-bottom:8px;">Task completed late</h2>
+      <p style="font-size:0.85rem; color:var(--muted); margin-bottom:16px;">
+        The time window for this task has passed. Please briefly explain why.
+      </p>
+      <div style="margin-bottom:16px; text-align:left;">
+        <label style="font-size:0.8rem; font-weight:600; color:var(--text-mid); margin-bottom:4px; display:block;">Reason <span style="color:var(--danger); font-size:0.75rem;">(required)</span></label>
+        <textarea id="lateReasonInput" rows="2" style="width:100%; padding:8px; font-size:0.85rem; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);" placeholder="e.g. Had a customer, stockroom was locked…"></textarea>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button onclick="confirmLate()" class="btn btn-primary btn-full">Save</button>
+        <button onclick="closeLateModal()" class="btn btn-ghost btn-full">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     var currentEmployee = <%- JSON.stringify(employeeName) %>;
     var serverCompletions = <%- JSON.stringify(completionMap) %>;
 
-    var taskData = <%- JSON.stringify(tasks.map(function(t){ return { text: t.text, completed: false, completionTime: null, completedByName: null }; })) %>;
+    var taskData = <%- JSON.stringify(tasks.map(function(t){ return {
+      text: t.text,
+      completed: false,
+      completionTime: null,
+      completedByName: null,
+      timeStart: t.timeStart || null,
+      timeEnd: t.timeEnd || null,
+      lateReason: null
+    }; })) %>;
 
     // Pre-fill from server completions (preserves state across page loads)
     taskData.forEach(function(t) {
@@ -96,14 +124,34 @@
         t.completed = true;
         t.completionTime = new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         t.completedByName = c.byName;
+        t.lateReason = c.lateReason || null;
       }
     });
 
+    // ── Time helpers ──────────────────────────────────────────────────────────
+    function timeToMins(hhmm) {
+      if (!hhmm) return null;
+      var parts = hhmm.split(':');
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    }
+
+    function fmt12h(hhmm) {
+      if (!hhmm) return '';
+      var parts = hhmm.split(':');
+      var h = parseInt(parts[0], 10);
+      var m = parts[1];
+      var ap = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return h + ':' + m + ' ' + ap;
+    }
+
+    // ── Render ────────────────────────────────────────────────────────────────
     function renderTask(idx) {
-      var t = taskData[idx];
+      var t      = taskData[idx];
       var item   = document.getElementById('task-' + idx);
       var cb     = document.getElementById('cb-' + idx);
       var timeEl = document.getElementById('time-' + idx);
+      var winEl  = document.getElementById('win-' + idx);
       if (!item || !cb || !timeEl) return;
 
       item.classList.toggle('done', t.completed);
@@ -112,12 +160,17 @@
 
       if (t.completed) {
         var parts = [];
-        // Only show name when someone else completed it
         if (t.completedByName && t.completedByName !== currentEmployee) parts.push(t.completedByName);
         if (t.completionTime) parts.push(t.completionTime);
+        if (t.lateReason) parts.push('⚠ Late');
         timeEl.textContent = parts.join(' · ');
+        if (winEl) { winEl.textContent = ''; winEl.style.display = 'none'; }
+        item.classList.remove('task-soon', 'task-overdue');
       } else {
         timeEl.textContent = '';
+        if (winEl) {
+          winEl.style.display = (t.timeStart || t.timeEnd) ? '' : 'none';
+        }
       }
     }
 
@@ -128,38 +181,104 @@
       document.getElementById('progressText').textContent = done + ' / ' + taskData.length + ' completed';
     }
 
-    // Apply server state on load
+    // ── Timing state (runs every 30 s) ────────────────────────────────────────
+    function checkTiming() {
+      var now     = new Date();
+      var nowMins = now.getHours() * 60 + now.getMinutes();
+
+      taskData.forEach(function(t, idx) {
+        if (t.completed) return;
+        if (!t.timeStart && !t.timeEnd) return;
+
+        var item  = document.getElementById('task-' + idx);
+        var winEl = document.getElementById('win-' + idx);
+        if (!item) return;
+
+        var startMins = timeToMins(t.timeStart);
+        var endMins   = timeToMins(t.timeEnd);
+
+        item.classList.remove('task-soon', 'task-overdue');
+
+        var label = '';
+        if (endMins !== null && nowMins > endMins) {
+          item.classList.add('task-overdue');
+          label = (t.timeStart ? fmt12h(t.timeStart) : '') +
+                  (t.timeStart && t.timeEnd ? '\u2013' : '') +
+                  (t.timeEnd ? fmt12h(t.timeEnd) : '') +
+                  ' \u00b7 Overdue';
+        } else if (startMins !== null && nowMins >= startMins - 15 && nowMins < startMins) {
+          item.classList.add('task-soon');
+          var minsLeft = startMins - nowMins;
+          label = 'Starts in ' + minsLeft + 'm';
+        } else {
+          if (t.timeStart) label += fmt12h(t.timeStart);
+          if (t.timeStart && t.timeEnd) label += '\u2013';
+          if (t.timeEnd) label += fmt12h(t.timeEnd);
+        }
+
+        if (winEl) winEl.textContent = label;
+      });
+    }
+
+    // Init
     taskData.forEach(function(_, idx) { renderTask(idx); });
     updateProgress();
+    checkTiming();
+    setInterval(checkTiming, 30000);
 
+    // ── Toggle task ───────────────────────────────────────────────────────────
     var toggling = false;
+    var pendingLateIdx = null;
 
     async function toggleTask(idx) {
       if (toggling) return;
-      toggling = true;
+      var t = taskData[idx];
+      var completing = !t.completed;
 
+      // Late check-off: completing a task past its end window requires explanation
+      if (completing && t.timeEnd) {
+        var now     = new Date();
+        var nowMins = now.getHours() * 60 + now.getMinutes();
+        var endMins = timeToMins(t.timeEnd);
+        if (endMins !== null && nowMins > endMins) {
+          pendingLateIdx = idx;
+          showLateModal();
+          return;
+        }
+      }
+
+      toggling = true;
+      await doToggle(idx, null);
+    }
+
+    async function doToggle(idx, lateReason) {
       var prev = {
-        completed: taskData[idx].completed,
+        completed:      taskData[idx].completed,
         completionTime: taskData[idx].completionTime,
-        completedByName: taskData[idx].completedByName
+        completedByName: taskData[idx].completedByName,
+        lateReason:     taskData[idx].lateReason,
       };
       var completing = !prev.completed;
 
       // Optimistic update
-      taskData[idx].completed     = completing;
-      taskData[idx].completionTime = completing
+      taskData[idx].completed      = completing;
+      taskData[idx].completionTime  = completing
         ? new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         : null;
       taskData[idx].completedByName = completing ? currentEmployee : null;
+      taskData[idx].lateReason      = completing ? lateReason : null;
 
       renderTask(idx);
       updateProgress();
+      if (!completing) checkTiming();
 
       try {
+        var bodyStr = 'taskName=' + encodeURIComponent(taskData[idx].text);
+        if (completing && lateReason) bodyStr += '&lateReason=' + encodeURIComponent(lateReason);
         var resp = await fetch(completing ? '/staff/complete' : '/staff/uncomplete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'taskName=' + encodeURIComponent(taskData[idx].text)
+          body: bodyStr,
         });
         if (!resp.ok) throw new Error('server error');
       } catch(e) {
@@ -167,6 +286,7 @@
         taskData[idx].completed      = prev.completed;
         taskData[idx].completionTime  = prev.completionTime;
         taskData[idx].completedByName = prev.completedByName;
+        taskData[idx].lateReason      = prev.lateReason;
         renderTask(idx);
         updateProgress();
       } finally {
@@ -174,6 +294,33 @@
       }
     }
 
+    // ── Late modal ────────────────────────────────────────────────────────────
+    function showLateModal() {
+      var modal = document.getElementById('lateModal');
+      modal.style.display = 'flex';
+      var inp = document.getElementById('lateReasonInput');
+      inp.value = '';
+      setTimeout(function() { inp.focus(); }, 60);
+    }
+
+    function closeLateModal() {
+      document.getElementById('lateModal').style.display = 'none';
+      pendingLateIdx = null;
+    }
+
+    async function confirmLate() {
+      var reason = document.getElementById('lateReasonInput').value.trim();
+      if (!reason) {
+        document.getElementById('lateReasonInput').focus();
+        return;
+      }
+      var idx = pendingLateIdx;
+      closeLateModal();
+      toggling = true;
+      await doToggle(idx, reason);
+    }
+
+    // ── Submit ────────────────────────────────────────────────────────────────
     var pendingSubmission = false;
 
     function showModal() {
@@ -201,7 +348,7 @@
     function submitShift() {
       var btn = document.getElementById('submitBtn');
       btn.disabled = true;
-      btn.textContent = 'Submitting…';
+      btn.textContent = 'Submitting\u2026';
 
       var done = taskData.filter(function(t){ return t.completed; }).length;
       if (done < taskData.length) {

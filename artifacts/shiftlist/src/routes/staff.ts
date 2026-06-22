@@ -18,33 +18,37 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
 
   const [standingRes, extraRes, compRes, shiftRes] = await Promise.all([
     pool.query(`
-      SELECT t.name as task_name
+      SELECT t.name as task_name, st.time_start, st.time_end
       FROM shift_tasks st
       JOIN tasks t ON t.id = st.task_id
       WHERE st.shift_id = $1
       ORDER BY st.display_order
     `, [shiftId]),
     pool.query(`
-      SELECT task_name
+      SELECT task_name, time_start, time_end
       FROM extra_day_tasks
       WHERE shift_id = $1 AND date = $2
       ORDER BY display_order
     `, [shiftId, today]),
     pool.query(`
-      SELECT task_name, completed_by_name, completed_at
+      SELECT task_name, completed_by_name, completed_at, late_reason
       FROM task_completions
       WHERE date = $1 AND shift_id = $2
     `, [today, shiftId]),
     pool.query("SELECT name FROM shifts WHERE id = $1", [shiftId]),
   ]);
 
-  const standingTasks = (standingRes.rows as { task_name: string }[]).map((t) => ({
+  const standingTasks = (standingRes.rows as { task_name: string; time_start: string | null; time_end: string | null }[]).map((t) => ({
     text: t.task_name,
     isExtra: false,
+    timeStart: t.time_start ?? null,
+    timeEnd: t.time_end ?? null,
   }));
-  const extraTasks = (extraRes.rows as { task_name: string }[]).map((t) => ({
+  const extraTasks = (extraRes.rows as { task_name: string; time_start: string | null; time_end: string | null }[]).map((t) => ({
     text: t.task_name,
     isExtra: true,
+    timeStart: t.time_start ?? null,
+    timeEnd: t.time_end ?? null,
   }));
   const tasks = [...standingTasks, ...extraTasks];
 
@@ -52,11 +56,12 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
     return void res.render("noTasks", { employeeName: req.session.employeeName });
   }
 
-  const completionMap: Record<string, { byName: string; at: string }> = {};
+  const completionMap: Record<string, { byName: string; at: string; lateReason: string | null }> = {};
   for (const row of compRes.rows as {
     task_name: string;
     completed_by_name: string;
     completed_at: Date | string;
+    late_reason: string | null;
   }[]) {
     completionMap[row.task_name] = {
       byName: row.completed_by_name,
@@ -64,6 +69,7 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
         row.completed_at instanceof Date
           ? row.completed_at.toISOString()
           : String(row.completed_at),
+      lateReason: row.late_reason,
     };
   }
 
@@ -80,7 +86,7 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
 });
 
 router.post("/complete", ensureStaffAuth, async (req, res) => {
-  const { taskName } = req.body as { taskName?: string };
+  const { taskName, lateReason } = req.body as { taskName?: string; lateReason?: string };
   const shiftId = req.session.selectedShiftId;
   const date = getTodayStr();
 
@@ -91,18 +97,20 @@ router.post("/complete", ensureStaffAuth, async (req, res) => {
   try {
     await pool.query(
       `INSERT INTO task_completions
-         (date, shift_id, task_name, completed_by_name, completed_by_code)
-       VALUES ($1, $2, $3, $4, $5)
+         (date, shift_id, task_name, completed_by_name, completed_by_code, late_reason)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (date, shift_id, task_name) DO UPDATE
          SET completed_by_name = EXCLUDED.completed_by_name,
              completed_by_code = EXCLUDED.completed_by_code,
-             completed_at      = NOW()`,
+             completed_at      = NOW(),
+             late_reason       = EXCLUDED.late_reason`,
       [
         date,
         shiftId,
         taskName.trim(),
         req.session.employeeName ?? "",
         req.session.employeeCode ?? "",
+        lateReason?.trim() ?? null,
       ]
     );
     res.json({ ok: true });
@@ -139,6 +147,7 @@ router.post("/submit", ensureStaffAuth, async (req, res) => {
     text: string;
     completed: boolean;
     completionTime: string | null;
+    lateReason?: string | null;
   }
   let tasks: TaskEntry[] = [];
   let notes = "";
@@ -160,10 +169,12 @@ router.post("/submit", ensureStaffAuth, async (req, res) => {
 
   const date = getTodayStr();
   const taskSummary = tasks
-    .map(
-      (t) =>
-        `${t.completed ? "✓" : "✗"} ${t.text}${t.completionTime ? ` (${t.completionTime})` : ""}`
-    )
+    .map((t) => {
+      let s = `${t.completed ? "✓" : "✗"} ${t.text}`;
+      if (t.completionTime) s += ` (${t.completionTime})`;
+      if (t.lateReason) s += ` — Late: ${t.lateReason}`;
+      return s;
+    })
     .join(" | ");
 
   try {

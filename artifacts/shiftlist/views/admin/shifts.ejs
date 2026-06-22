@@ -79,6 +79,21 @@
             </div>
           </div>
 
+          <!-- Time window (optional) -->
+          <div style="margin-bottom:12px;">
+            <div style="font-size:0.78rem; font-weight:700; color:var(--muted); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:7px;">
+              Time Window <span style="font-weight:400; text-transform:none; color:var(--muted);">(optional)</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <input type="time" name="time_start"
+                     style="width:auto; min-height:36px; font-size:0.88rem; padding:5px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+              <span style="color:var(--muted); font-size:0.85rem;">to</span>
+              <input type="time" name="time_end"
+                     style="width:auto; min-height:36px; font-size:0.88rem; padding:5px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+              <span style="color:var(--muted); font-size:0.75rem;">(leave blank for no window)</span>
+            </div>
+          </div>
+
           <button type="submit" class="btn btn-primary btn-full">Add Task</button>
         </form>
       </div>
@@ -113,10 +128,28 @@
                   <span class="task-num"><%= idx + 1 %>.</span>
                   <span class="task-edit-name" contenteditable="true" spellcheck="false"
                         data-rename-url="/admin/shifts/<%= selectedShift.id %>/standing/rename/<%= task.id %>"><%= task.task_name %></span>
+                  <button type="button" class="btn btn-sm btn-ghost task-time-toggle"
+                          data-panel="tpanel-s-<%= task.id %>"
+                          data-set-url="/admin/shifts/<%= selectedShift.id %>/standing/set-time/<%= task.id %>"
+                          data-ts="<%= task.time_start || '' %>"
+                          data-te="<%= task.time_end || '' %>"
+                          style="min-height:28px; padding:3px 7px; font-size:0.7rem; flex-shrink:0;" title="Set time window">⏱</button>
                   <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/remove/<%= task.id %>"
                         onsubmit="return confirm('Remove this task from the standing list?')" style="flex-shrink:0;">
                     <button type="submit" class="btn btn-danger btn-sm">✕</button>
                   </form>
+                </div>
+                <div class="task-time-panel" id="tpanel-s-<%= task.id %>">
+                  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <label style="font-size:0.75rem; color:var(--muted); text-transform:none; font-weight:600; letter-spacing:0; white-space:nowrap; margin:0;">From</label>
+                    <input type="time" class="tp-start" value="<%= task.time_start || '' %>"
+                           style="width:auto; min-height:30px; font-size:0.82rem; padding:4px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+                    <label style="font-size:0.75rem; color:var(--muted); text-transform:none; font-weight:600; letter-spacing:0; white-space:nowrap; margin:0;">to</label>
+                    <input type="time" class="tp-end" value="<%= task.time_end || '' %>"
+                           style="width:auto; min-height:30px; font-size:0.82rem; padding:4px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+                    <button type="button" class="btn btn-sm btn-primary tp-save" style="min-height:30px; padding:4px 12px; font-size:0.8rem;">Save</button>
+                    <button type="button" class="btn btn-sm btn-ghost tp-clear" style="min-height:30px; padding:4px 12px; font-size:0.8rem;">Clear</button>
+                  </div>
                 </div>
               <% }); %>
             </div>
@@ -157,10 +190,28 @@
                         data-rename-url="/admin/shifts/<%= selectedShift.id %>/day/<%= extraDate %>/rename-extra/<%= task.id %>"
                         style="flex:1; font-size:0.9rem; outline:none; border-radius:4px; padding:2px 4px;"
                         ><%= task.task_name %></span>
+                  <button type="button" class="btn btn-sm btn-ghost task-time-toggle"
+                          data-panel="tpanel-e-<%= task.id %>"
+                          data-set-url="/admin/shifts/<%= selectedShift.id %>/day/<%= extraDate %>/set-time-extra/<%= task.id %>"
+                          data-ts="<%= task.time_start || '' %>"
+                          data-te="<%= task.time_end || '' %>"
+                          style="min-height:28px; padding:3px 7px; font-size:0.7rem; flex-shrink:0;" title="Set time window">⏱</button>
                   <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= extraDate %>/remove-extra/<%= task.id %>"
                         onsubmit="return confirm('Remove this extra task?')" style="flex-shrink:0;">
                     <button type="submit" class="btn btn-danger btn-sm">✕</button>
                   </form>
+                </div>
+                <div class="task-time-panel" id="tpanel-e-<%= task.id %>">
+                  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <label style="font-size:0.75rem; color:var(--muted); text-transform:none; font-weight:600; letter-spacing:0; white-space:nowrap; margin:0;">From</label>
+                    <input type="time" class="tp-start" value="<%= task.time_start || '' %>"
+                           style="width:auto; min-height:30px; font-size:0.82rem; padding:4px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+                    <label style="font-size:0.75rem; color:var(--muted); text-transform:none; font-weight:600; letter-spacing:0; white-space:nowrap; margin:0;">to</label>
+                    <input type="time" class="tp-end" value="<%= task.time_end || '' %>"
+                           style="width:auto; min-height:30px; font-size:0.82rem; padding:4px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+                    <button type="button" class="btn btn-sm btn-primary tp-save" style="min-height:30px; padding:4px 12px; font-size:0.8rem;">Save</button>
+                    <button type="button" class="btn btn-sm btn-ghost tp-clear" style="min-height:30px; padding:4px 12px; font-size:0.8rem;">Clear</button>
+                  </div>
                 </div>
               <% }); %>
             </div>
@@ -500,6 +551,109 @@
           extraDateForm.submit();
         });
       }
+
+      // ── Time window toggle buttons ────────────────────────────────────────────
+      function fmt12hAdmin(t) {
+        if (!t) return '';
+        var parts = t.split(':');
+        var h = parseInt(parts[0], 10);
+        var m = parts[1];
+        var ap = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        return h + ':' + m + ' ' + ap;
+      }
+
+      function updateTimeBtnLabel(btn) {
+        var ts = btn.dataset.ts;
+        var te = btn.dataset.te;
+        if (ts || te) {
+          var label = '⏱ ';
+          if (ts) label += fmt12hAdmin(ts);
+          if (ts && te) label += '–';
+          if (te) label += fmt12hAdmin(te);
+          btn.textContent = label;
+          btn.style.color = 'var(--brand)';
+          btn.style.borderColor = 'rgba(56,182,160,.4)';
+        } else {
+          btn.textContent = '⏱';
+          btn.style.color = '';
+          btn.style.borderColor = '';
+        }
+      }
+
+      function initTimeToggle(btn) {
+        var panelId = btn.dataset.panel;
+        var panel = document.getElementById(panelId);
+        if (!panel) return;
+        updateTimeBtnLabel(btn);
+
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var wasOpen = panel.classList.contains('open');
+          document.querySelectorAll('.task-time-panel.open').forEach(function(p) {
+            p.classList.remove('open');
+          });
+          if (!wasOpen) panel.classList.add('open');
+        });
+
+        var saveBtn  = panel.querySelector('.tp-save');
+        var clearBtn = panel.querySelector('.tp-clear');
+        var startInput = panel.querySelector('.tp-start');
+        var endInput   = panel.querySelector('.tp-end');
+
+        if (saveBtn) {
+          saveBtn.addEventListener('click', function() {
+            var ts = startInput ? startInput.value : '';
+            var te = endInput   ? endInput.value   : '';
+            fetch(btn.dataset.setUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ time_start: ts, time_end: te }),
+            }).then(function(r) {
+              if (r.ok) {
+                btn.dataset.ts = ts;
+                btn.dataset.te = te;
+                updateTimeBtnLabel(btn);
+                panel.classList.remove('open');
+                showToast('Time window saved');
+              } else {
+                showToast('Failed to save time window', true);
+              }
+            }).catch(function() { showToast('Failed to save time window', true); });
+          });
+        }
+
+        if (clearBtn) {
+          clearBtn.addEventListener('click', function() {
+            if (startInput) startInput.value = '';
+            if (endInput)   endInput.value   = '';
+            fetch(btn.dataset.setUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ time_start: '', time_end: '' }),
+            }).then(function(r) {
+              if (r.ok) {
+                btn.dataset.ts = '';
+                btn.dataset.te = '';
+                updateTimeBtnLabel(btn);
+                panel.classList.remove('open');
+                showToast('Time window cleared');
+              } else {
+                showToast('Failed to clear time window', true);
+              }
+            }).catch(function() { showToast('Failed to clear time window', true); });
+          });
+        }
+      }
+
+      document.querySelectorAll('.task-time-toggle').forEach(initTimeToggle);
+
+      // Close time panels when clicking elsewhere
+      document.addEventListener('click', function() {
+        document.querySelectorAll('.task-time-panel.open').forEach(function(p) {
+          p.classList.remove('open');
+        });
+      });
     })();
   </script>
 </body>

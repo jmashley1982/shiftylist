@@ -145,13 +145,13 @@ router.get("/shifts", async (req, res) => {
   const rawExtraDate = typeof req.query.extraDate === "string" ? req.query.extraDate.trim() : "";
   const extraDate = /^\d{4}-\d{2}-\d{2}$/.test(rawExtraDate) ? rawExtraDate : today;
 
-  let standingTasks: { id: number; task_name: string; display_order: number }[] = [];
-  let extraTasks: { id: number; task_name: string; display_order: number }[] = [];
+  let standingTasks: { id: number; task_name: string; display_order: number; time_start: string | null; time_end: string | null }[] = [];
+  let extraTasks: { id: number; task_name: string; display_order: number; time_start: string | null; time_end: string | null }[] = [];
 
   if (selectedShift) {
     const [stRes, etRes] = await Promise.all([
       pool.query(
-        `SELECT st.id, st.display_order, t.name as task_name
+        `SELECT st.id, st.display_order, st.time_start, st.time_end, t.name as task_name
          FROM shift_tasks st
          JOIN tasks t ON t.id = st.task_id
          WHERE st.shift_id = $1
@@ -159,7 +159,7 @@ router.get("/shifts", async (req, res) => {
         [selectedShift.id]
       ),
       pool.query(
-        `SELECT id, task_name, display_order
+        `SELECT id, task_name, display_order, time_start, time_end
          FROM extra_day_tasks
          WHERE shift_id = $1 AND date = $2
          ORDER BY display_order`,
@@ -189,6 +189,8 @@ router.post("/shifts/add-task", async (req, res) => {
     type?: string;
     shiftIds?: string | string[];
     date?: string;
+    time_start?: string;
+    time_end?: string;
   };
 
   const name = body.name?.trim();
@@ -202,6 +204,8 @@ router.post("/shifts/add-task", async (req, res) => {
     : [];
   const shiftIds = rawIds.map(Number).filter((n) => n > 0);
   const date = body.date?.trim() || getTodayStr();
+  const timeStart = body.time_start?.trim() || null;
+  const timeEnd = body.time_end?.trim() || null;
 
   if (shiftIds.length === 0) return void res.redirect("/admin/shifts");
 
@@ -216,9 +220,9 @@ router.post("/shifts/add-task", async (req, res) => {
           )
         ).rows[0];
         await client.query(
-          `INSERT INTO shift_tasks (shift_id, task_id, display_order) VALUES ($1, $2, $3)
+          `INSERT INTO shift_tasks (shift_id, task_id, display_order, time_start, time_end) VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (shift_id, task_id) DO NOTHING`,
-          [shiftId, taskId, (maxRow.max as number) + 1]
+          [shiftId, taskId, (maxRow.max as number) + 1, timeStart, timeEnd]
         );
       }
     });
@@ -231,8 +235,8 @@ router.post("/shifts/add-task", async (req, res) => {
         )
       ).rows[0];
       await pool.query(
-        "INSERT INTO extra_day_tasks (shift_id, date, task_name, display_order) VALUES ($1, $2, $3, $4)",
-        [shiftId, date, name, (maxRow.max as number) + 1]
+        "INSERT INTO extra_day_tasks (shift_id, date, task_name, display_order, time_start, time_end) VALUES ($1, $2, $3, $4, $5, $6)",
+        [shiftId, date, name, (maxRow.max as number) + 1, timeStart, timeEnd]
       );
     }
   }
@@ -341,6 +345,19 @@ router.post("/shifts/:shiftId/standing/reorder", async (req, res) => {
 });
 
 // ── Extra tasks for a specific day ──────────────────────────────────────────
+router.post("/shifts/:shiftId/standing/set-time/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const shiftId = Number(req.params.shiftId);
+  const body = req.body as { time_start?: string; time_end?: string };
+  const timeStart = body.time_start?.trim() || null;
+  const timeEnd = body.time_end?.trim() || null;
+  await pool.query(
+    "UPDATE shift_tasks SET time_start = $1, time_end = $2 WHERE id = $3 AND shift_id = $4",
+    [timeStart, timeEnd, id, shiftId]
+  );
+  res.json({ ok: true });
+});
+
 router.post("/shifts/:shiftId/day/:date/remove-extra/:id", async (req, res) => {
   await pool.query("DELETE FROM extra_day_tasks WHERE id = $1", [Number(req.params.id)]);
   res.redirect(hubUrl(req.params.shiftId, req.params.date));
@@ -353,6 +370,20 @@ router.post("/shifts/:shiftId/day/:date/rename-extra/:id", async (req, res) => {
   await pool.query(
     "UPDATE extra_day_tasks SET task_name = $1 WHERE id = $2 AND shift_id = $3 AND date = $4",
     [name, id, Number(req.params.shiftId), req.params.date]
+  );
+  res.json({ ok: true });
+});
+
+router.post("/shifts/:shiftId/day/:date/set-time-extra/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const shiftId = Number(req.params.shiftId);
+  const { date } = req.params;
+  const body = req.body as { time_start?: string; time_end?: string };
+  const timeStart = body.time_start?.trim() || null;
+  const timeEnd = body.time_end?.trim() || null;
+  await pool.query(
+    "UPDATE extra_day_tasks SET time_start = $1, time_end = $2 WHERE id = $3 AND shift_id = $4 AND date = $5",
+    [timeStart, timeEnd, id, shiftId, date]
   );
   res.json({ ok: true });
 });

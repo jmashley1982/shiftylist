@@ -15,4 +15,11 @@ CREATE TABLE IF NOT EXISTS active_sessions (
   started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (employee_id, date)
 );
+
+-- Time window columns (added to support timed tasks)
+ALTER TABLE shift_tasks     ADD COLUMN IF NOT EXISTS time_start TEXT;
+ALTER TABLE shift_tasks     ADD COLUMN IF NOT EXISTS time_end   TEXT;
+ALTER TABLE extra_day_tasks ADD COLUMN IF NOT EXISTS time_start TEXT;
+ALTER TABLE extra_day_tasks ADD COLUMN IF NOT EXISTS time_end   TEXT;
+ALTER TABLE task_completions ADD COLUMN IF NOT EXISTS late_reason TEXT;
 SQL
