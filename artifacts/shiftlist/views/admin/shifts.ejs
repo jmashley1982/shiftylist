@@ -443,6 +443,8 @@
           var rect = target.getBoundingClientRect();
           var before = e.clientY < rect.top + rect.height / 2;
           list.insertBefore(dragging, before ? target : target.nextSibling);
+          var dragPanel = document.getElementById('tpanel-s-' + dragging.dataset.id);
+          if (dragPanel) dragging.insertAdjacentElement('afterend', dragPanel);
           dragging.classList.remove('is-dragging');
           dragging = null;
           overEl = null;
@@ -469,6 +471,8 @@
           var rect = target.getBoundingClientRect();
           var before = touch.clientY < rect.top + rect.height / 2;
           list.insertBefore(dragEl, before ? target : target.nextSibling);
+          var touchPanel = document.getElementById('tpanel-s-' + dragEl.dataset.id);
+          if (touchPanel) dragEl.insertAdjacentElement('afterend', touchPanel);
           refreshNums(list);
         }
 
