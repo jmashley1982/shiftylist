@@ -496,7 +496,7 @@ async function fetchLiveData(today: string): Promise<LiveData> {
 }
 
 router.get("/live", async (_req, res) => {
-  void sweepStaleSessions().catch(() => {});
+  void sweepStaleSessions();
   const today = getTodayStr();
   const { shiftData, activeSessions } = await fetchLiveData(today);
   res.render("admin/live", { shiftData, activeSessions, today, formatDateDisplay });
@@ -510,7 +510,7 @@ router.get("/live/data", async (_req, res) => {
 
 // ════════════════════════════════════ Reports ═════════════════════════════════
 router.get("/reports", async (req, res) => {
-  void sweepStaleSessions().catch(() => {});
+  void sweepStaleSessions();
   try {
     await Promise.all([
       pool.query("DELETE FROM submissions WHERE submitted_at < NOW() - INTERVAL '30 days'"),

@@ -8,7 +8,7 @@ import { sweepStaleSessions } from "../utils/autoSubmit.js";
 const router = Router();
 
 router.get("/tasks", ensureStaffAuth, async (req, res) => {
-  void sweepStaleSessions().catch(() => {});
+  void sweepStaleSessions();
   const today = getTodayStr();
   const shiftId = req.session.selectedShiftId;
 
