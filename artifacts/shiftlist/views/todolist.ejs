@@ -84,24 +84,6 @@
     </div>
   </div>
 
-  <!-- Late check-off modal -->
-  <div id="lateModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:200; align-items:center; justify-content:center;">
-    <div style="background:var(--card); border-radius:12px; padding:24px; max-width:340px; width:90%; box-shadow:var(--shadow-lg); text-align:center; border:1px solid var(--border);">
-      <div style="font-size:2rem; margin-bottom:8px;">🕐</div>
-      <h2 style="font-size:1.1rem; margin-bottom:8px;">Task completed late</h2>
-      <p style="font-size:0.85rem; color:var(--muted); margin-bottom:16px;">
-        The time window for this task has passed. Please briefly explain why.
-      </p>
-      <div style="margin-bottom:16px; text-align:left;">
-        <label style="font-size:0.8rem; font-weight:600; color:var(--text-mid); margin-bottom:4px; display:block;">Reason <span style="color:var(--danger); font-size:0.75rem;">(required)</span></label>
-        <textarea id="lateReasonInput" rows="2" style="width:100%; padding:8px; font-size:0.85rem; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);" placeholder="e.g. Had a customer, stockroom was locked…"></textarea>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        <button onclick="confirmLate()" class="btn btn-primary btn-full">Save</button>
-        <button onclick="closeLateModal()" class="btn btn-ghost btn-full">Cancel</button>
-      </div>
-    </div>
-  </div>
 
   <script>
     var currentEmployee = <%- JSON.stringify(employeeName) %>;
@@ -228,27 +210,25 @@
 
     // ── Toggle task ───────────────────────────────────────────────────────────
     var toggling = false;
-    var pendingLateIdx = null;
 
     async function toggleTask(idx) {
       if (toggling) return;
       var t = taskData[idx];
       var completing = !t.completed;
 
-      // Late check-off: completing a task past its end window requires explanation
+      // Auto-detect late completion — no modal, just flag it silently
+      var lateReason = null;
       if (completing && t.timeEnd) {
         var now     = new Date();
         var nowMins = now.getHours() * 60 + now.getMinutes();
         var endMins = timeToMins(t.timeEnd);
         if (endMins !== null && nowMins > endMins) {
-          pendingLateIdx = idx;
-          showLateModal();
-          return;
+          lateReason = 'completed after window';
         }
       }
 
       toggling = true;
-      await doToggle(idx, null);
+      await doToggle(idx, lateReason);
     }
 
     async function doToggle(idx, lateReason) {
@@ -292,32 +272,6 @@
       } finally {
         toggling = false;
       }
-    }
-
-    // ── Late modal ────────────────────────────────────────────────────────────
-    function showLateModal() {
-      var modal = document.getElementById('lateModal');
-      modal.style.display = 'flex';
-      var inp = document.getElementById('lateReasonInput');
-      inp.value = '';
-      setTimeout(function() { inp.focus(); }, 60);
-    }
-
-    function closeLateModal() {
-      document.getElementById('lateModal').style.display = 'none';
-      pendingLateIdx = null;
-    }
-
-    async function confirmLate() {
-      var reason = document.getElementById('lateReasonInput').value.trim();
-      if (!reason) {
-        document.getElementById('lateReasonInput').focus();
-        return;
-      }
-      var idx = pendingLateIdx;
-      closeLateModal();
-      toggling = true;
-      await doToggle(idx, reason);
     }
 
     // ── Submit ────────────────────────────────────────────────────────────────
