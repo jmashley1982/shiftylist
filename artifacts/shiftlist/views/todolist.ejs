@@ -164,9 +164,18 @@
     }
 
     // ── Timing state (runs every 30 s) ────────────────────────────────────────
+    // Times before 6 AM (360 min) are treated as next-day to handle windows
+    // that cross midnight (e.g. 10 PM–12:30 AM closing-shift tasks).
+    var NEXT_DAY_BOUNDARY = 360; // 6:00 AM
+
+    function normMins(m) {
+      return (m !== null && m < NEXT_DAY_BOUNDARY) ? m + 1440 : m;
+    }
+
     function checkTiming() {
       var now     = new Date();
-      var nowMins = now.getHours() * 60 + now.getMinutes();
+      var rawNow  = now.getHours() * 60 + now.getMinutes();
+      var nowMins = normMins(rawNow);
 
       taskData.forEach(function(t, idx) {
         if (t.completed) return;
@@ -178,19 +187,21 @@
 
         var startMins = timeToMins(t.timeStart);
         var endMins   = timeToMins(t.timeEnd);
+        var normStart = normMins(startMins);
+        var normEnd   = normMins(endMins);
 
         item.classList.remove('task-soon', 'task-overdue');
 
         var label = '';
-        if (endMins !== null && nowMins > endMins) {
+        if (normEnd !== null && nowMins > normEnd) {
           item.classList.add('task-overdue');
           label = (t.timeStart ? fmt12h(t.timeStart) : '') +
                   (t.timeStart && t.timeEnd ? '\u2013' : '') +
                   (t.timeEnd ? fmt12h(t.timeEnd) : '') +
                   ' \u00b7 Overdue';
-        } else if (startMins !== null && nowMins >= startMins - 15 && nowMins < startMins) {
+        } else if (normStart !== null && nowMins >= normStart - 15 && nowMins < normStart) {
           item.classList.add('task-soon');
-          var minsLeft = startMins - nowMins;
+          var minsLeft = normStart - nowMins;
           label = 'Starts in ' + minsLeft + 'm';
         } else {
           if (t.timeStart) label += fmt12h(t.timeStart);
@@ -219,10 +230,10 @@
       // Auto-detect late completion — no modal, just flag it silently
       var lateReason = null;
       if (completing && t.timeEnd) {
-        var now     = new Date();
-        var nowMins = now.getHours() * 60 + now.getMinutes();
-        var endMins = timeToMins(t.timeEnd);
-        if (endMins !== null && nowMins > endMins) {
+        var now        = new Date();
+        var rawNowMins = now.getHours() * 60 + now.getMinutes();
+        var endMins    = timeToMins(t.timeEnd);
+        if (endMins !== null && normMins(rawNowMins) > normMins(endMins)) {
           lateReason = 'completed after window';
         }
       }
