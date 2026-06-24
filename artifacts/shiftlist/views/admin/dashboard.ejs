@@ -9,69 +9,262 @@
 <body>
   <%- include('../partials/admin-nav', { active: 'dashboard' }) %>
   <div class="main-content">
-    <div class="page-header" style="margin-top:12px;">
-      <h1>Dashboard</h1>
-      <p>Overview of your team</p>
-    </div>
 
-    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; margin-bottom:16px;">
-      <div class="panel" style="text-align:center;">
-        <div style="font-size:2rem; font-weight:800; color:var(--brand);"><%= employeeCount %></div>
-        <div style="font-size:0.85rem; color:var(--muted);">Staff</div>
+    <div class="page-header" style="margin-top:12px; display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:20px;">
+      <div>
+        <h1 style="margin-bottom:3px;">Dashboard</h1>
+        <p style="margin:0;"><%= formatDateDisplay(today) %></p>
       </div>
-      <div class="panel" style="text-align:center;">
-        <div style="font-size:2rem; font-weight:800; color:var(--brand);"><%= shiftCount %></div>
-        <div style="font-size:0.85rem; color:var(--muted);">Shifts</div>
-      </div>
-      <div class="panel" style="text-align:center;">
-        <div style="font-size:2rem; font-weight:800; color:var(--brand);"><%= taskCount %></div>
-        <div style="font-size:0.85rem; color:var(--muted);">Tasks</div>
-      </div>
-      <div class="panel" style="text-align:center;">
-        <div style="font-size:2rem; font-weight:800; color:#f59e0b;"><%= customCount %></div>
-        <div style="font-size:0.85rem; color:var(--muted);">Custom days</div>
+      <div style="display:flex; align-items:center; gap:10px; margin-top:4px;">
+        <span id="liveBadge" class="live-badge"><span class="live-badge-dot"></span><span id="liveBadgeLabel">LIVE</span></span>
+        <span id="refreshCountdown" style="font-size:0.78rem; color:var(--muted);"></span>
       </div>
     </div>
 
-    <div class="panel" style="margin-bottom:16px;">
-      <h2 style="font-size:1rem; margin-bottom:12px;">Recent Activity <span style="font-size:0.78rem; font-weight:400; color:var(--muted);">— last 30 days</span></h2>
-      <% if (staffActivity.length === 0) { %>
-        <p style="color:var(--muted); font-size:0.9rem; margin:0;">No submissions yet.</p>
-      <% } else { %>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <% staffActivity.forEach(function(staff) { %>
-            <a href="/admin/reports?employee=<%= encodeURIComponent(staff.employee_name) %>"
-               style="display:flex; align-items:center; justify-content:space-between; text-decoration:none; padding:10px 12px; background:var(--surface2); border-radius:8px; border:1px solid var(--border); transition:border-color 0.15s;"
-               onmouseover="this.style.borderColor='var(--brand)'" onmouseout="this.style.borderColor='var(--border)'">
-              <div>
-                <div style="font-weight:600; color:var(--text); font-size:0.95rem;"><%= staff.employee_name %></div>
-                <div style="font-size:0.78rem; color:var(--muted); margin-top:2px;">
-                  <%= staff.submission_count %> submission<%= staff.submission_count === 1 ? '' : 's' %>
-                </div>
+    <div class="dash-grid">
+
+      <!-- ── LEFT / MAIN COLUMN ─────────────────────────────────── -->
+      <div>
+
+        <!-- Today's Shifts -->
+        <div style="margin-bottom:20px;">
+          <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin-bottom:10px;">Today's Shifts</div>
+          <div style="display:flex; flex-direction:column; gap:10px;" id="shiftStatusGrid">
+            <% if (shiftData.length === 0) { %>
+              <div class="panel" style="padding:14px 16px;">
+                <p style="color:var(--muted); font-size:0.88rem; margin:0;">No shifts set up yet. <a href="/admin/shifts" style="color:var(--brand);">Create one →</a></p>
               </div>
-              <div style="text-align:right;">
-                <% var pct = staff.avg_completion_pct; %>
-                <div style="font-size:1.25rem; font-weight:800; color:<%= pct >= 90 ? 'var(--brand)' : pct >= 70 ? '#f59e0b' : '#ef4444' %>;">
-                  <%= pct !== null ? pct + '%' : '—' %>
+            <% } %>
+            <% shiftData.forEach(function(sd) { %>
+              <%
+                var sub = null;
+                for (var i = 0; i < todaySubmissions.length; i++) {
+                  if (todaySubmissions[i].shift_name.toLowerCase() === sd.shift.name.toLowerCase()) {
+                    sub = todaySubmissions[i]; break;
+                  }
+                }
+                var activeOnShift = activeSessions.filter(function(s) {
+                  return s.shiftName.toLowerCase() === sd.shift.name.toLowerCase();
+                });
+                var pct = sd.total > 0 ? Math.round(sd.done / sd.total * 100) : 0;
+              %>
+              <div class="panel" data-shift-id="<%= sd.shift.id %>" style="padding:14px 16px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:<%= sd.total > 0 ? '10px' : '0' %>;">
+                  <span class="shift-badge" style="font-size:0.82rem;"><%= sd.shift.name %></span>
+
+                  <% if (sub) { %>
+                    <span style="font-size:0.72rem; font-weight:700; padding:2px 9px; background:rgba(56,182,160,.14); color:var(--brand); border-radius:20px; border:1px solid rgba(56,182,160,.3);">✓ Submitted<%= sub.count > 1 ? ' (' + sub.count + ')' : '' %></span>
+                  <% } else { %>
+                    <span style="font-size:0.72rem; font-weight:600; padding:2px 9px; background:rgba(156,163,175,.08); color:var(--muted); border-radius:20px; border:1px solid var(--border);">Pending</span>
+                  <% } %>
+
+                  <% if (activeOnShift.length > 0) { %>
+                    <span style="font-size:0.72rem; padding:2px 9px; background:rgba(56,182,160,.08); color:var(--brand); border-radius:20px; display:flex; align-items:center; gap:5px; border:1px solid rgba(56,182,160,.2);">
+                      <span style="width:6px; height:6px; border-radius:50%; background:var(--brand); display:inline-block; animation:live-dot-pulse 2s ease-in-out infinite;"></span>
+                      <%= activeOnShift.length %> active
+                    </span>
+                  <% } %>
+
+                  <% if (sd.total > 0) { %>
+                    <span data-role="counter" style="margin-left:auto; font-size:0.88rem; font-weight:700; color:var(--text);"><%= sd.done %>/<%= sd.total %></span>
+                  <% } %>
                 </div>
-                <div style="font-size:0.72rem; color:var(--muted);">avg completion</div>
+
+                <% if (sd.total > 0) { %>
+                  <div class="progress-bar-wrap" style="margin-bottom:<%= activeOnShift.length > 0 ? '7px' : '0' %>;">
+                    <div class="progress-bar-fill" data-role="progress" style="width:<%= pct %>%"></div>
+                  </div>
+                  <% if (activeOnShift.length > 0) { %>
+                    <div style="font-size:0.75rem; color:var(--muted);">On shift: <%= activeOnShift.map(function(s){ return s.employeeName; }).join(', ') %></div>
+                  <% } %>
+                <% } else { %>
+                  <p style="font-size:0.8rem; color:var(--muted); margin:0;">No tasks configured for this shift.</p>
+                <% } %>
               </div>
-            </a>
-          <% }); %>
+            <% }); %>
+          </div>
         </div>
-      <% } %>
-    </div>
 
-    <div class="panel">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-        <h2 style="font-size:1rem;">Quick Links</h2>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        <a href="/admin/shifts" class="btn btn-primary btn-full">Build Shift Checklists</a>
-        <a href="/admin/employees" class="btn btn-ghost btn-full">Manage Staff</a>
-        <a href="/admin/reports" class="btn btn-ghost btn-full">View Reports</a>
-      </div>
-    </div>
+        <!-- Staff Performance -->
+        <div class="panel">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:6px;">
+            <h2 style="font-size:1rem; margin:0;">Staff Performance <span style="font-size:0.78rem; font-weight:400; color:var(--muted);">— last 30 days</span></h2>
+            <a href="/admin/reports" style="font-size:0.8rem; color:var(--brand); text-decoration:none; font-weight:600;">All reports →</a>
+          </div>
+          <% if (staffActivity.length === 0) { %>
+            <p style="color:var(--muted); font-size:0.9rem; margin:0;">No submissions yet.</p>
+          <% } else { %>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <% staffActivity.forEach(function(staff) { %>
+                <% var pct = staff.avg_completion_pct; %>
+                <a href="/admin/reports?employee=<%= encodeURIComponent(staff.employee_name) %>"
+                   style="display:flex; align-items:center; gap:12px; text-decoration:none; padding:10px 12px; background:var(--surface2); border-radius:8px; border:1px solid var(--border); transition:border-color 0.15s;"
+                   onmouseover="this.style.borderColor='var(--brand)'" onmouseout="this.style.borderColor='var(--border)'">
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-weight:600; color:var(--text); font-size:0.92rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><%= staff.employee_name %></div>
+                    <div style="font-size:0.75rem; color:var(--muted); margin-top:2px;"><%= staff.submission_count %> submission<%= staff.submission_count === 1 ? '' : 's' %></div>
+                  </div>
+                  <div style="text-align:right; flex-shrink:0;">
+                    <div style="font-size:1.15rem; font-weight:800; color:<%= pct !== null && pct >= 90 ? 'var(--brand)' : pct !== null && pct >= 70 ? '#f59e0b' : '#ef4444' %>;">
+                      <%= pct !== null ? pct + '%' : '—' %>
+                    </div>
+                    <div style="font-size:0.7rem; color:var(--muted);">avg completion</div>
+                  </div>
+                </a>
+              <% }); %>
+            </div>
+          <% } %>
+        </div>
+
+      </div><!-- /left column -->
+
+      <!-- ── RIGHT / SIDEBAR COLUMN ────────────────────────────── -->
+      <div class="dash-sidebar">
+
+        <!-- Currently Active -->
+        <div class="panel" style="margin-bottom:14px;">
+          <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin-bottom:10px; display:flex; align-items:center; gap:7px;">
+            <span style="width:7px; height:7px; border-radius:50%; background:var(--brand); display:inline-block; animation:live-dot-pulse 2s ease-in-out infinite; flex-shrink:0;"></span>
+            Currently Active
+          </div>
+          <div id="activeSessionsList">
+            <% if (activeSessions.length === 0) { %>
+              <p style="color:var(--muted); font-size:0.85rem; margin:0;">No staff on shift.</p>
+            <% } else { %>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                <% activeSessions.forEach(function(s) { %>
+                  <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--surface2); border-radius:8px; border:1px solid var(--border);">
+                    <span style="font-weight:600; flex:1; font-size:0.88rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><%= s.employeeName %></span>
+                    <span class="shift-badge" style="font-size:0.72rem; padding:2px 8px; flex-shrink:0;"><%= s.shiftName %></span>
+                  </div>
+                <% }); %>
+              </div>
+            <% } %>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="panel" style="margin-bottom:14px;">
+          <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin-bottom:10px;">Quick Actions</div>
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <a href="/admin/live" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">🟢&nbsp; Live View</a>
+            <a href="/admin/shifts" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">📋&nbsp; Build Checklists</a>
+            <a href="/admin/employees" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">👥&nbsp; Manage Staff</a>
+            <a href="/admin/reports" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">📊&nbsp; View Reports</a>
+          </div>
+        </div>
+
+        <!-- Store Stats -->
+        <div class="panel">
+          <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin-bottom:10px;">Store Stats</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div style="text-align:center; padding:10px 8px; background:var(--surface2); border-radius:8px; border:1px solid var(--border);">
+              <div style="font-size:1.7rem; font-weight:800; color:var(--brand); line-height:1.1;"><%= employeeCount %></div>
+              <div style="font-size:0.72rem; color:var(--muted); margin-top:3px;">Staff</div>
+            </div>
+            <div style="text-align:center; padding:10px 8px; background:var(--surface2); border-radius:8px; border:1px solid var(--border);">
+              <div style="font-size:1.7rem; font-weight:800; color:var(--brand); line-height:1.1;"><%= shiftCount %></div>
+              <div style="font-size:0.72rem; color:var(--muted); margin-top:3px;">Shifts</div>
+            </div>
+            <div style="text-align:center; padding:10px 8px; background:var(--surface2); border-radius:8px; border:1px solid var(--border);">
+              <div style="font-size:1.7rem; font-weight:800; color:var(--brand); line-height:1.1;"><%= taskCount %></div>
+              <div style="font-size:0.72rem; color:var(--muted); margin-top:3px;">Tasks</div>
+            </div>
+            <div style="text-align:center; padding:10px 8px; background:var(--surface2); border-radius:8px; border:1px solid var(--border);">
+              <div style="font-size:1.7rem; font-weight:800; color:<%= customCount > 0 ? '#f59e0b' : 'var(--muted)' %>; line-height:1.1;"><%= customCount %></div>
+              <div style="font-size:0.72rem; color:var(--muted); margin-top:3px;">Extra today</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /sidebar column -->
+
+    </div><!-- /dash-grid -->
   </div>
+
+  <script>
+    var POLL_SECONDS = 15;
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    var badgeEl = document.getElementById('liveBadge');
+    var badgeLabelEl = document.getElementById('liveBadgeLabel');
+
+    function setBadgeUpdating() {
+      if (!badgeEl) return;
+      badgeEl.classList.add('updating');
+      if (badgeLabelEl) badgeLabelEl.textContent = 'Updating…';
+    }
+
+    function setBadgeLive() {
+      if (!badgeEl) return;
+      badgeEl.classList.remove('updating');
+      if (badgeLabelEl) badgeLabelEl.textContent = 'LIVE';
+      badgeEl.classList.remove('flash');
+      void badgeEl.offsetWidth;
+      badgeEl.classList.add('flash');
+    }
+
+    function updateActiveSessions(sessions) {
+      var el = document.getElementById('activeSessionsList');
+      if (!el) return;
+      if (sessions.length === 0) {
+        el.innerHTML = '<p style="color:var(--muted); font-size:0.85rem; margin:0;">No staff on shift.</p>';
+        return;
+      }
+      var html = '<div style="display:flex; flex-direction:column; gap:6px;">';
+      sessions.forEach(function(s) {
+        html += '<div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--surface2); border-radius:8px; border:1px solid var(--border);">'
+          + '<span style="font-weight:600; flex:1; font-size:0.88rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + escHtml(s.employeeName) + '</span>'
+          + '<span class="shift-badge" style="font-size:0.72rem; padding:2px 8px; flex-shrink:0;">' + escHtml(s.shiftName) + '</span>'
+          + '</div>';
+      });
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    function updateShiftPanels(shiftData) {
+      shiftData.forEach(function(sd) {
+        var panel = document.querySelector('[data-shift-id="' + sd.shift.id + '"]');
+        if (!panel) return;
+        var counterEl = panel.querySelector('[data-role="counter"]');
+        var progressEl = panel.querySelector('[data-role="progress"]');
+        if (sd.total > 0) {
+          var pct = Math.round(sd.done / sd.total * 100);
+          if (counterEl) counterEl.textContent = sd.done + '/' + sd.total;
+          if (progressEl) progressEl.style.width = pct + '%';
+        }
+      });
+    }
+
+    async function poll() {
+      setBadgeUpdating();
+      try {
+        var res = await fetch('/admin/live/data');
+        if (!res.ok) { setBadgeLive(); return; }
+        var data = await res.json();
+        updateShiftPanels(data.shiftData);
+        if (data.activeSessions) updateActiveSessions(data.activeSessions);
+        setBadgeLive();
+      } catch (_) {
+        setBadgeLive();
+      }
+    }
+
+    var seconds = POLL_SECONDS;
+    var countdownEl = document.getElementById('refreshCountdown');
+
+    function tick() {
+      if (countdownEl) countdownEl.textContent = 'Updates in ' + seconds + 's';
+      if (seconds === 0) { seconds = POLL_SECONDS; poll(); }
+      else { seconds--; }
+      setTimeout(tick, 1000);
+    }
+
+    tick();
+  </script>
 </body>
 </html>

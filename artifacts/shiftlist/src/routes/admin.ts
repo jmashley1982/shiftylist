@@ -66,7 +66,7 @@ async function bulkRenormalizeOrder(
 // ════════════════════════════════════ Dashboard ═════════════════════════════════
 router.get("/dashboard", async (_req, res) => {
   const today = getTodayStr();
-  const [empRes, shiftRes, taskRes, extraRes, activityRes] = await Promise.all([
+  const [empRes, shiftRes, taskRes, extraRes, activityRes, todaySubsRes, liveResult] = await Promise.all([
     pool.query("SELECT COUNT(*) as count FROM employees"),
     pool.query("SELECT COUNT(*) as count FROM shifts"),
     pool.query("SELECT COUNT(*) as count FROM tasks"),
@@ -89,6 +89,12 @@ router.get("/dashboard", async (_req, res) => {
       GROUP BY employee_name
       ORDER BY employee_name
     `),
+    pool.query(
+      `SELECT shift_name, COUNT(*)::int as count, MAX(submitted_at) as last_at
+       FROM submissions WHERE date = $1 GROUP BY shift_name`,
+      [today]
+    ),
+    fetchLiveData(today),
   ]);
 
   res.render("admin/dashboard", {
@@ -97,7 +103,12 @@ router.get("/dashboard", async (_req, res) => {
     taskCount: taskRes.rows[0].count,
     customCount: extraRes.rows[0].count,
     staffActivity: activityRes.rows as { employee_name: string; submission_count: number; avg_completion_pct: number | null }[],
+    todaySubmissions: todaySubsRes.rows as { shift_name: string; count: number; last_at: Date }[],
+    shiftData: liveResult.shiftData,
+    activeSessions: liveResult.activeSessions,
     today,
+    formatLocalTime,
+    formatDateDisplay,
   });
 });
 

@@ -1082,3 +1082,97 @@ tbody tr:hover { background: rgba(56,182,160,.04); }
 .live-badge.flash {
   animation: live-badge-flash 0.6s ease-out forwards;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DASHBOARD GRID (mobile-first, desktop 2-col)
+   ══════════════════════════════════════════════════════════════════════════ */
+.dash-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.dash-sidebar {
+  margin-top: 20px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DESKTOP ADMIN LAYOUT  ≥ 900px
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 900px) {
+
+  /* ── Sidebar nav ── */
+  .admin-tab-nav {
+    position: fixed;
+    top: 60px;
+    bottom: 0;
+    left: 0;
+    right: auto;
+    width: 210px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    border-top: none;
+    border-right: 1px solid var(--border);
+    padding: 16px 0 24px;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    overflow-y: auto;
+  }
+
+  .admin-tab-link {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 11px;
+    padding: 11px 22px;
+    font-size: 0.88rem;
+    min-height: auto;
+    text-transform: none;
+    letter-spacing: 0;
+    border-radius: 0;
+    border-right: 3px solid transparent;
+  }
+
+  .admin-tab-link .tab-icon {
+    font-size: 1.1rem;
+    width: 22px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .admin-tab-link.active {
+    background: rgba(56,182,160,.1);
+    border-right-color: var(--brand);
+    color: var(--brand);
+  }
+
+  .admin-tab-link.active .tab-icon-bg {
+    background: none;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  /* ── Main content shifts right ── */
+  .main-content,
+  .main-content-notabs {
+    margin-left: 210px;
+    max-width: none;
+    padding: 28px 36px;
+    padding-bottom: 40px;
+  }
+
+  /* ── Dashboard 2-column grid ── */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .dash-sidebar {
+    margin-top: 0;
+  }
+}
