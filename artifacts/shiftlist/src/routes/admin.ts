@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db/index.js";
 import { ensureAdminAuth } from "../middleware/auth.js";
-import { getTodayStr, formatDateDisplay, formatLocalTime } from "../utils/dateHelpers.js";
+import { getTodayStr, getBusinessDayStr, formatDateDisplay, formatLocalTime } from "../utils/dateHelpers.js";
 import { sweepStaleSessions } from "../utils/autoSubmit.js";
 
 const router = Router();
@@ -65,7 +65,7 @@ async function bulkRenormalizeOrder(
 
 // ════════════════════════════════════ Dashboard ═════════════════════════════════
 router.get("/dashboard", async (_req, res) => {
-  const today = getTodayStr();
+  const today = getBusinessDayStr();
   const [empRes, shiftRes, taskRes, extraRes, activityRes, todaySubsRes, liveResult] = await Promise.all([
     pool.query("SELECT COUNT(*) as count FROM employees"),
     pool.query("SELECT COUNT(*) as count FROM shifts"),
@@ -539,13 +539,13 @@ async function fetchLiveData(today: string): Promise<LiveData> {
 
 router.get("/live", async (_req, res) => {
   void sweepStaleSessions();
-  const today = getTodayStr();
+  const today = getBusinessDayStr();
   const { shiftData, activeSessions } = await fetchLiveData(today);
   res.render("admin/live", { shiftData, activeSessions, today, formatDateDisplay });
 });
 
 router.get("/live/data", async (_req, res) => {
-  const today = getTodayStr();
+  const today = getBusinessDayStr();
   const { shiftData, activeSessions } = await fetchLiveData(today);
   res.json({ shiftData, activeSessions, today });
 });

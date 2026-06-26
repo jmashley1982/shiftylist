@@ -1,6 +1,6 @@
 import { pool } from "../db/index.js";
 import { logger } from "../lib/logger.js";
-import { getTodayStr } from "./dateHelpers.js";
+import { getBusinessDayStr } from "./dateHelpers.js";
 
 const CUTOFF_HOUR = 1; // 1:00 AM local time
 
@@ -29,7 +29,7 @@ export async function sweepStaleSessions(): Promise<void> {
   try {
     if (localHour() < CUTOFF_HOUR) return;
 
-    const today = getTodayStr();
+    const today = getBusinessDayStr();
 
     const staleRes = await pool.query<{
       id: number;

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
 import { ensureStaffAuth } from "../middleware/auth.js";
-import { getTodayStr } from "../utils/dateHelpers.js";
+import { getBusinessDayStr } from "../utils/dateHelpers.js";
 import { logger } from "../lib/logger.js";
 import { sweepStaleSessions } from "../utils/autoSubmit.js";
 
@@ -9,7 +9,7 @@ const router = Router();
 
 router.get("/tasks", ensureStaffAuth, async (req, res) => {
   void sweepStaleSessions();
-  const today = getTodayStr();
+  const today = getBusinessDayStr();
   const shiftId = req.session.selectedShiftId;
 
   if (!shiftId) {
@@ -88,7 +88,7 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
 router.post("/complete", ensureStaffAuth, async (req, res) => {
   const { taskName, lateReason } = req.body as { taskName?: string; lateReason?: string };
   const shiftId = req.session.selectedShiftId;
-  const date = getTodayStr();
+  const date = getBusinessDayStr();
 
   if (!shiftId || !taskName?.trim()) {
     return void res.status(400).json({ ok: false, error: "Missing taskName or shift" });
@@ -123,7 +123,7 @@ router.post("/complete", ensureStaffAuth, async (req, res) => {
 router.post("/uncomplete", ensureStaffAuth, async (req, res) => {
   const { taskName } = req.body as { taskName?: string };
   const shiftId = req.session.selectedShiftId;
-  const date = getTodayStr();
+  const date = getBusinessDayStr();
 
   if (!shiftId || !taskName?.trim()) {
     return void res.status(400).json({ ok: false, error: "Missing taskName or shift" });
@@ -167,7 +167,7 @@ router.post("/submit", ensureStaffAuth, async (req, res) => {
       )?.name ?? ""
     : "";
 
-  const date = getTodayStr();
+  const date = getBusinessDayStr();
   const taskSummary = tasks
     .map((t) => {
       let s = `${t.completed ? "✓" : "✗"} ${t.text}`;

@@ -60,7 +60,7 @@ router.post("/select-shift", async (req, res) => {
   const shiftIdNum = Number(shiftId);
   req.session.selectedShiftId = shiftIdNum;
 
-  const today = (await import("../utils/dateHelpers.js")).getTodayStr();
+  const today = (await import("../utils/dateHelpers.js")).getBusinessDayStr();
   const shiftRow = await pool.query("SELECT name FROM shifts WHERE id = $1", [shiftIdNum]);
   const shiftName = (shiftRow.rows[0] as { name: string } | undefined)?.name ?? "";
   await pool.query(
