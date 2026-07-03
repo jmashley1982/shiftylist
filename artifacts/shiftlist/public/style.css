@@ -1176,3 +1176,9 @@ tbody tr:hover { background: rgba(56,182,160,.04); }
     margin-top: 0;
   }
 }
+
+/* ── Extra (today-only) task items ─────────────────────────────────────── */
+.task-item-extra {
+  border-left: 3px solid var(--brand) !important;
+  background: rgba(56,182,160,.06) !important;
+}

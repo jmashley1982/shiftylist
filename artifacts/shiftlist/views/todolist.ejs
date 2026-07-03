@@ -31,13 +31,23 @@
     </div>
 
     <ul class="task-list" id="taskList">
+      <% if (extraCount > 0) { %>
+        <li style="list-style:none; margin-bottom:6px;">
+          <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(56,182,160,.12); border:1px solid rgba(56,182,160,.35); border-radius:8px;">
+            <span style="font-size:1rem; line-height:1;">⚡</span>
+            <span style="font-size:0.78rem; font-weight:800; color:var(--brand); letter-spacing:0.07em; text-transform:uppercase;">Today only — <%= extraCount %> extra task<%= extraCount === 1 ? '' : 's' %></span>
+          </div>
+        </li>
+      <% } %>
       <% tasks.forEach(function(task, idx) { %>
-        <% if (task.isExtra && idx === standingCount) { %>
-          <li style="list-style:none; padding:10px 0 4px; text-align:center;">
-            <span style="font-size:0.75rem; font-weight:700; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase;">— Today only —</span>
+        <% if (extraCount > 0 && idx === extraCount) { %>
+          <li style="list-style:none; padding:10px 0 2px; display:flex; align-items:center; gap:8px;">
+            <div style="flex:1; height:1px; background:var(--border);"></div>
+            <span style="font-size:0.7rem; font-weight:700; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap;">Regular tasks</span>
+            <div style="flex:1; height:1px; background:var(--border);"></div>
           </li>
         <% } %>
-        <li class="task-item" id="task-<%= idx %>" onclick="toggleTask(<%= idx %>)">
+        <li class="task-item<%= task.isExtra ? ' task-item-extra' : '' %>" id="task-<%= idx %>" onclick="toggleTask(<%= idx %>)">
           <div class="task-checkbox" id="cb-<%= idx %>"></div>
           <span class="task-text" id="text-<%= idx %>"><%= task.text %></span>
           <span class="task-window-badge" id="win-<%= idx %>"></span>

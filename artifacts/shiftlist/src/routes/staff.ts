@@ -50,7 +50,8 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
     timeStart: t.time_start ?? null,
     timeEnd: t.time_end ?? null,
   }));
-  const tasks = [...standingTasks, ...extraTasks];
+  // Extra (one-off) tasks go first so they stand out at the top
+  const tasks = [...extraTasks, ...standingTasks];
 
   if (tasks.length === 0) {
     return void res.render("noTasks", { employeeName: req.session.employeeName });
@@ -78,7 +79,7 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
 
   res.render("todolist", {
     tasks,
-    standingCount: standingTasks.length,
+    extraCount: extraTasks.length,
     employeeName: req.session.employeeName,
     shift: shiftName,
     completionMap,
