@@ -99,6 +99,29 @@
     var currentEmployee = <%- JSON.stringify(employeeName) %>;
     var serverCompletions = <%- JSON.stringify(completionMap) %>;
 
+    // ── Progress-restored banner ───────────────────────────────────────────────
+    (function() {
+      var count = Object.keys(serverCompletions).length;
+      if (count === 0) return;
+      var banner = document.createElement('div');
+      banner.id = 'restoredBanner';
+      banner.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 14px; margin-bottom:12px; background:rgba(56,182,160,.12); border:1px solid rgba(56,182,160,.35); border-radius:8px; cursor:pointer;';
+      banner.innerHTML = '<span style="font-size:0.82rem; font-weight:700; color:var(--brand);">✓ Progress restored — ' + count + ' task' + (count === 1 ? '' : 's') + ' already completed.</span>'
+        + '<span style="font-size:0.75rem; color:var(--brand); opacity:0.7; flex-shrink:0;">Tap to dismiss</span>';
+      banner.onclick = function() { banner.remove(); };
+      var list = document.getElementById('taskList');
+      if (list) list.parentNode.insertBefore(banner, list);
+    })();
+
+    // ── Toast helper ──────────────────────────────────────────────────────────
+    function showToast(msg) {
+      var t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1e2a2a; color:#fff; padding:12px 20px; border-radius:10px; font-size:0.88rem; font-weight:600; z-index:999; box-shadow:0 4px 16px rgba(0,0,0,0.4); pointer-events:none; max-width:90vw; text-align:center;';
+      document.body.appendChild(t);
+      setTimeout(function() { t.remove(); }, 3500);
+    }
+
     var taskData = <%- JSON.stringify(tasks.map(function(t){ return {
       text: t.text,
       completed: false,
@@ -281,9 +304,17 @@
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: bodyStr,
         });
+        // Detect session expiry: server returns HTML redirect, not JSON
+        var ct = resp.headers.get('content-type') || '';
+        if (!resp.ok && !ct.includes('application/json')) {
+          // Session expired — keep visual state (DB is safe), redirect to login
+          showToast('Session expired — logging you back in…');
+          setTimeout(function() { window.location.href = '/login'; }, 1800);
+          return; // don't revert; don't set toggling = false (page is navigating away)
+        }
         if (!resp.ok) throw new Error('server error');
       } catch(e) {
-        // Revert on failure
+        // Generic server error — revert optimistic update
         taskData[idx].completed      = prev.completed;
         taskData[idx].completionTime  = prev.completionTime;
         taskData[idx].completedByName = prev.completedByName;

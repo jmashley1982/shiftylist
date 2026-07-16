@@ -116,7 +116,7 @@ router.post("/complete", ensureStaffAuth, async (req, res) => {
        ON CONFLICT (date, shift_id, task_name) DO UPDATE
          SET completed_by_name = EXCLUDED.completed_by_name,
              completed_by_code = EXCLUDED.completed_by_code,
-             completed_at      = NOW(),
+             completed_at      = task_completions.completed_at,
              late_reason       = EXCLUDED.late_reason`,
       [
         date,
