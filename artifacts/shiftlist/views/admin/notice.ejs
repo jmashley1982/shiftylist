@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Staff Notice</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'notice' }) %>
+  <div class="main-content">
+
+    <div class="page-header" style="margin-top:12px;">
+      <h1>Staff Notice</h1>
+      <p>Write a message that pops up for every staff member when they open their task list. Leave all fields blank to disable it.</p>
+    </div>
+
+    <% if (saved) { %>
+      <div style="margin-bottom:16px; padding:10px 14px; background:rgba(56,182,160,.12); border:1px solid rgba(56,182,160,.3); border-radius:8px; font-size:0.88rem; color:var(--brand); font-weight:600;">
+        ✓ Notice saved.
+      </div>
+    <% } %>
+
+    <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+
+      <!-- ── Editor ── -->
+      <div style="flex:1; min-width:260px;">
+        <form method="POST" action="/admin/notice">
+          <div class="panel" style="margin-bottom:0;">
+            <div style="display:flex; flex-direction:column; gap:14px;">
+
+              <div>
+                <label style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;">Title</label>
+                <input type="text" name="title" value="<%= notice.title %>" maxlength="80"
+                  placeholder="e.g. Inventory count today"
+                  style="width:100%; padding:10px 12px; font-size:0.95rem; font-weight:700; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text);">
+              </div>
+
+              <div>
+                <label style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;">Subtitle</label>
+                <input type="text" name="subtitle" value="<%= notice.subtitle %>" maxlength="120"
+                  placeholder="e.g. Please read before starting your shift"
+                  style="width:100%; padding:10px 12px; font-size:0.88rem; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text);">
+              </div>
+
+              <div>
+                <label style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;">Message</label>
+                <textarea name="body" rows="5" maxlength="1000"
+                  placeholder="Details about the notice…"
+                  style="width:100%; padding:10px 12px; font-size:0.88rem; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); resize:vertical; line-height:1.5;"><%= notice.body %></textarea>
+              </div>
+
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="submit" class="btn btn-primary" style="flex:1;">Save notice</button>
+                <button type="submit" name="clear" value="1" class="btn btn-ghost" style="flex:1; color:var(--danger); border-color:var(--danger);"
+                  onclick="return confirm('Clear the notice so nothing shows to staff?')">Clear notice</button>
+              </div>
+
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- ── Live preview ── -->
+      <div style="flex:1; min-width:260px; max-width:400px;">
+        <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin-bottom:10px;">Preview</div>
+        <div id="previewCard" style="background:var(--card); border-radius:14px; border:1px solid var(--border); padding:28px 24px; text-align:center; box-shadow:var(--shadow-sm);">
+          <div style="font-size:1.5rem; margin-bottom:12px;">📢</div>
+          <div id="prevTitle" style="font-size:1.15rem; font-weight:800; color:var(--text); margin-bottom:6px; line-height:1.25;"></div>
+          <div id="prevSubtitle" style="font-size:0.88rem; color:var(--brand); font-weight:600; margin-bottom:14px;"></div>
+          <div id="prevBody" style="font-size:0.88rem; color:var(--text-mid); line-height:1.6; text-align:left; white-space:pre-wrap; margin-bottom:20px;"></div>
+          <div style="font-size:0.78rem; color:var(--muted);">Staff tap "Got it" to dismiss</div>
+        </div>
+        <p id="previewEmpty" style="font-size:0.85rem; color:var(--muted); margin-top:10px; display:none;">No active notice — staff will not see a pop-up.</p>
+      </div>
+
+    </div>
+
+    <% if (notice.updated_at) { %>
+      <p style="font-size:0.78rem; color:var(--muted); margin-top:14px;">Last updated: <%= formatLocalTime(notice.updated_at) %></p>
+    <% } %>
+
+  </div>
+
+  <script>
+    var titleIn    = document.querySelector('input[name="title"]');
+    var subtitleIn = document.querySelector('input[name="subtitle"]');
+    var bodyIn     = document.querySelector('textarea[name="body"]');
+
+    function updatePreview() {
+      var t = titleIn.value.trim();
+      var s = subtitleIn.value.trim();
+      var b = bodyIn.value.trim();
+      var empty = !t && !s && !b;
+
+      document.getElementById('prevTitle').textContent    = t;
+      document.getElementById('prevSubtitle').textContent = s;
+      document.getElementById('prevBody').textContent     = b;
+      document.getElementById('previewCard').style.display  = empty ? 'none' : '';
+      document.getElementById('previewEmpty').style.display = empty ? ''     : 'none';
+    }
+
+    titleIn.addEventListener('input', updatePreview);
+    subtitleIn.addEventListener('input', updatePreview);
+    bodyIn.addEventListener('input', updatePreview);
+    updatePreview();
+  </script>
+</body>
+</html>

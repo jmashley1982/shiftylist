@@ -358,5 +358,43 @@
       }
     }
   </script>
+
+  <% if (staffNotice) { %>
+  <div id="noticeOverlay" style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.65); display:flex; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:var(--card); border-radius:18px; border:1px solid var(--border); max-width:420px; width:100%; padding:32px 28px; text-align:center; box-shadow:0 24px 64px rgba(0,0,0,0.5); animation:slideUp 0.25s ease;">
+      <div style="font-size:2rem; margin-bottom:16px;">📢</div>
+      <% if (staffNotice.title) { %>
+        <h2 style="margin:0 0 8px; font-size:1.25rem; font-weight:800; color:var(--text); line-height:1.2;"><%= staffNotice.title %></h2>
+      <% } %>
+      <% if (staffNotice.subtitle) { %>
+        <p style="margin:0 0 16px; font-size:0.9rem; font-weight:600; color:var(--brand);"><%= staffNotice.subtitle %></p>
+      <% } %>
+      <% if (staffNotice.body) { %>
+        <p style="margin:0 0 24px; font-size:0.88rem; color:var(--text-mid); line-height:1.6; text-align:left; white-space:pre-wrap;"><%= staffNotice.body %></p>
+      <% } %>
+      <button onclick="dismissNotice()" class="btn btn-primary" style="width:100%; font-size:1rem; padding:13px;">Got it</button>
+    </div>
+  </div>
+  <style>
+    @keyframes slideUp {
+      from { opacity:0; transform:translateY(16px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+  </style>
+  <script>
+    (function() {
+      var KEY = 'notice_dismissed_<%= Date.now() - (Date.now() % 86400000) %>';
+      if (sessionStorage.getItem('notice_dismissed')) {
+        var el = document.getElementById('noticeOverlay');
+        if (el) el.style.display = 'none';
+      }
+    })();
+    function dismissNotice() {
+      sessionStorage.setItem('notice_dismissed', '1');
+      var el = document.getElementById('noticeOverlay');
+      if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.2s'; setTimeout(function(){ el.style.display='none'; }, 200); }
+    }
+  </script>
+  <% } %>
 </body>
 </html>

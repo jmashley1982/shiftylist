@@ -624,4 +624,42 @@ router.get("/reports", async (req, res) => {
   }
 });
 
+// ── Staff Notice ─────────────────────────────────────────────────────────────
+
+router.get("/notice", async (req, res) => {
+  const empty = { title: "", subtitle: "", body: "", updated_at: null };
+  try {
+    const r = await pool.query(
+      `SELECT title, subtitle, body, updated_at FROM staff_notice ORDER BY id DESC LIMIT 1`
+    );
+    const notice = r.rows[0] ?? empty;
+    const saved = req.query.saved === "1";
+    res.render("admin/notice", { notice, saved, formatLocalTime });
+  } catch {
+    res.render("admin/notice", { notice: empty, saved: false, formatLocalTime });
+  }
+});
+
+router.post("/notice", async (req, res) => {
+  const clear = req.body.clear === "1";
+  const title    = clear ? "" : String(req.body.title    ?? "").trim().slice(0, 80);
+  const subtitle = clear ? "" : String(req.body.subtitle ?? "").trim().slice(0, 120);
+  const body     = clear ? "" : String(req.body.body     ?? "").trim().slice(0, 1000);
+
+  await pool.query(
+    `INSERT INTO staff_notice (title, subtitle, body, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT DO NOTHING`,
+    [title, subtitle, body]
+  );
+  // Always upsert by deleting all rows then inserting one
+  await pool.query(`DELETE FROM staff_notice`);
+  await pool.query(
+    `INSERT INTO staff_notice (title, subtitle, body, updated_at) VALUES ($1, $2, $3, NOW())`,
+    [title, subtitle, body]
+  );
+
+  res.redirect("/admin/notice?saved=1");
+});
+
 export default router;

@@ -77,12 +77,25 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
   const shiftName =
     (shiftRes.rows[0] as { name: string } | undefined)?.name ?? "";
 
+  // Fetch active staff notice (show if any field is non-empty)
+  let staffNotice: { title: string; subtitle: string; body: string } | null = null;
+  try {
+    const noticeRes = await pool.query<{ title: string; subtitle: string; body: string }>(
+      `SELECT title, subtitle, body FROM staff_notice ORDER BY id DESC LIMIT 1`
+    );
+    const n = noticeRes.rows[0];
+    if (n && (n.title || n.subtitle || n.body)) staffNotice = n;
+  } catch {
+    // ignore — notice is non-critical
+  }
+
   res.render("todolist", {
     tasks,
     extraCount: extraTasks.length,
     employeeName: req.session.employeeName,
     shift: shiftName,
     completionMap,
+    staffNotice,
   });
 });
 

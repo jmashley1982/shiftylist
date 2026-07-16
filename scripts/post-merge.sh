@@ -25,4 +25,14 @@ ALTER TABLE task_completions ADD COLUMN IF NOT EXISTS late_reason TEXT;
 
 -- Add auto_submitted flag to submissions (idempotent)
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS auto_submitted BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Staff notice (admin-written pop-up shown to staff after login)
+CREATE TABLE IF NOT EXISTS staff_notice (
+  id         SERIAL PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  subtitle   TEXT NOT NULL DEFAULT '',
+  body       TEXT NOT NULL DEFAULT '',
+  is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 SQL
