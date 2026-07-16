@@ -304,13 +304,15 @@
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: bodyStr,
         });
-        // Detect session expiry: server returns HTML redirect, not JSON
+        // Detect session expiry: fetch follows the /login redirect and lands on
+        // 200 HTML. Check content-type first — if it's not JSON the session has
+        // expired regardless of HTTP status code.
         var ct = resp.headers.get('content-type') || '';
-        if (!resp.ok && !ct.includes('application/json')) {
+        if (!ct.includes('application/json')) {
           // Session expired — keep visual state (DB is safe), redirect to login
           showToast('Session expired — logging you back in…');
           setTimeout(function() { window.location.href = '/login'; }, 1800);
-          return; // don't revert; don't set toggling = false (page is navigating away)
+          return; // finally still runs (toggling = false), page navigating away
         }
         if (!resp.ok) throw new Error('server error');
       } catch(e) {
