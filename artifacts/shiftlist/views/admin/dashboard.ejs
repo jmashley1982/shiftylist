@@ -21,6 +21,37 @@
       </div>
     </div>
 
+    <% if (yesterdayNotes.length > 0) { %>
+    <div id="notesPanel" style="margin-bottom:20px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.35); border-radius:10px 10px 0 0; cursor:pointer; user-select:none;" onclick="toggleNotes()">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1rem;">📝</span>
+          <span style="font-size:0.82rem; font-weight:800; color:#f59e0b; text-transform:uppercase; letter-spacing:0.07em;">
+            Staff notes from <%= formatDateDisplay(yesterday) %>
+          </span>
+          <span style="font-size:0.75rem; font-weight:600; padding:1px 8px; background:rgba(245,158,11,.2); color:#f59e0b; border-radius:20px; border:1px solid rgba(245,158,11,.3);">
+            <%= yesterdayNotes.length %>
+          </span>
+        </div>
+        <span id="notesChevron" style="font-size:0.85rem; color:#f59e0b; transition:transform 0.2s;">▲</span>
+      </div>
+      <div id="notesBody" style="border:1px solid rgba(245,158,11,.25); border-top:none; border-radius:0 0 10px 10px; background:var(--card); overflow:hidden;">
+        <div style="display:flex; flex-direction:column; gap:0;">
+          <% yesterdayNotes.forEach(function(note, i) { %>
+            <div style="padding:12px 16px; <%= i < yesterdayNotes.length - 1 ? 'border-bottom:1px solid var(--border);' : '' %> display:flex; flex-direction:column; gap:4px;">
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span style="font-weight:700; font-size:0.9rem; color:var(--text);"><%= note.employee_name %></span>
+                <span class="shift-badge" style="font-size:0.72rem; padding:1px 8px;"><%= note.shift_name %></span>
+                <span style="font-size:0.75rem; color:var(--muted); margin-left:auto; white-space:nowrap;"><%= formatLocalTime(note.submitted_at) %></span>
+              </div>
+              <p style="margin:0; font-size:0.88rem; color:var(--text-mid); line-height:1.5; white-space:pre-wrap;"><%= note.notes %></p>
+            </div>
+          <% }); %>
+        </div>
+      </div>
+    </div>
+    <% } %>
+
     <div class="dash-grid">
 
       <!-- ── LEFT / MAIN COLUMN ─────────────────────────────────── -->
@@ -184,6 +215,40 @@
 
   <script>
     var POLL_SECONDS = 15;
+
+    // ── Notes panel toggle (persisted per browser) ──────────────────
+    var NOTES_KEY = 'dash_notes_collapsed';
+    var notesCollapsed = localStorage.getItem(NOTES_KEY) === '1';
+
+    function applyNotesState(animate) {
+      var body = document.getElementById('notesBody');
+      var chevron = document.getElementById('notesChevron');
+      if (!body) return;
+      if (notesCollapsed) {
+        body.style.maxHeight = '0';
+        body.style.overflow = 'hidden';
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+      } else {
+        body.style.maxHeight = body.scrollHeight + 'px';
+        body.style.overflow = '';
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+      }
+    }
+
+    function toggleNotes() {
+      notesCollapsed = !notesCollapsed;
+      localStorage.setItem(NOTES_KEY, notesCollapsed ? '1' : '0');
+      var body = document.getElementById('notesBody');
+      if (body) body.style.transition = 'max-height 0.25s ease';
+      applyNotesState(true);
+    }
+
+    // Apply on load without animation
+    (function() {
+      var body = document.getElementById('notesBody');
+      if (body) body.style.transition = 'none';
+      applyNotesState(false);
+    })();
 
     function escHtml(str) {
       return String(str)

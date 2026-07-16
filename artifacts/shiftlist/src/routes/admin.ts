@@ -66,7 +66,13 @@ async function bulkRenormalizeOrder(
 // ════════════════════════════════════ Dashboard ═════════════════════════════════
 router.get("/dashboard", async (_req, res) => {
   const today = getBusinessDayStr();
-  const [empRes, shiftRes, taskRes, extraRes, activityRes, todaySubsRes, liveResult] = await Promise.all([
+
+  // Previous business day: subtract one calendar day from today's date string
+  const todayDate = new Date(today + "T12:00:00");
+  todayDate.setDate(todayDate.getDate() - 1);
+  const yesterday = todayDate.toISOString().slice(0, 10);
+
+  const [empRes, shiftRes, taskRes, extraRes, activityRes, todaySubsRes, yesNotesRes, liveResult] = await Promise.all([
     pool.query("SELECT COUNT(*) as count FROM employees"),
     pool.query("SELECT COUNT(*) as count FROM shifts"),
     pool.query("SELECT COUNT(*) as count FROM tasks"),
@@ -94,6 +100,16 @@ router.get("/dashboard", async (_req, res) => {
        FROM submissions WHERE date = $1 GROUP BY shift_name`,
       [today]
     ),
+    pool.query(
+      `SELECT employee_name, shift_name, notes, submitted_at, auto_submitted
+       FROM submissions
+       WHERE date = $1
+         AND notes IS NOT NULL AND TRIM(notes) <> ''
+       ORDER BY
+         CASE LOWER(shift_name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END,
+         submitted_at DESC`,
+      [yesterday]
+    ),
     fetchLiveData(today),
   ]);
 
@@ -104,9 +120,11 @@ router.get("/dashboard", async (_req, res) => {
     customCount: extraRes.rows[0].count,
     staffActivity: activityRes.rows as { employee_name: string; submission_count: number; avg_completion_pct: number | null }[],
     todaySubmissions: todaySubsRes.rows as { shift_name: string; count: number; last_at: Date }[],
+    yesterdayNotes: yesNotesRes.rows as { employee_name: string; shift_name: string; notes: string; submitted_at: Date; auto_submitted: boolean }[],
     shiftData: liveResult.shiftData,
     activeSessions: liveResult.activeSessions,
     today,
+    yesterday,
     formatLocalTime,
     formatDateDisplay,
   });
