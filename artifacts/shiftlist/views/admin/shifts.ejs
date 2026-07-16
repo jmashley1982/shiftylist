@@ -328,6 +328,15 @@
       }
 
       // ── Helpers ─────────────────────────────────────────────────────────────
+      function handleSessionExpired(r) {
+        if (r.redirected) {
+          showToast('Session expired — please log back in', true);
+          setTimeout(function() { window.location.href = '/admin/login'; }, 1500);
+          return true;
+        }
+        return false;
+      }
+
       function refreshNums(list) {
         list.querySelectorAll('.task-row').forEach(function(row, i) {
           var n = row.querySelector('.task-num');
@@ -345,6 +354,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ids: ids }),
         }).then(function(r) {
+          if (handleSessionExpired(r)) { return; }
           if (r.ok) { flashList(list); }
           else { showToast('Failed to save order — try again', true); }
         }).catch(function() { showToast('Failed to save order — check your connection', true); });
@@ -377,6 +387,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: val }),
           }).then(function(r) {
+            if (handleSessionExpired(r)) { span.textContent = original; clearDirty(span); return; }
             if (r.ok) { original = val; clearDirty(span); flashRow(row); }
             else { span.textContent = original; clearDirty(span); showToast('Failed to rename — try again', true); }
           }).catch(function() { span.textContent = original; clearDirty(span); showToast('Failed to rename — check your connection', true); });
@@ -530,6 +541,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: val }),
           }).then(function(r) {
+            if (handleSessionExpired(r)) { span.textContent = original; return; }
             if (r.ok) { original = val; if (row) flashRow(row); }
             else { span.textContent = original; showToast('Failed to rename — try again', true); }
           }).catch(function() { span.textContent = original; showToast('Failed to rename — check your connection', true); });
@@ -614,6 +626,7 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ time_start: ts, time_end: te }),
             }).then(function(r) {
+              if (handleSessionExpired(r)) { return; }
               if (r.ok) {
                 btn.dataset.ts = ts;
                 btn.dataset.te = te;
@@ -636,6 +649,7 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ time_start: '', time_end: '' }),
             }).then(function(r) {
+              if (handleSessionExpired(r)) { return; }
               if (r.ok) {
                 btn.dataset.ts = '';
                 btn.dataset.te = '';
