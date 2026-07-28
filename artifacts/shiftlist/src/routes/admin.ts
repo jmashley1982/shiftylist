@@ -8,6 +8,26 @@ import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
 const router = Router();
 router.use(ensureAdminAuth);
 
+/**
+ * TEMPORARY diagnostic — reports which database the Worker is actually talking
+ * to. Admin-gated. Remove once the Neon/Hyperdrive wiring is confirmed.
+ */
+router.get("/admin/__dbinfo", async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT current_database()               AS database,
+              current_user                     AS db_user,
+              inet_server_addr()::text         AS server_addr,
+              current_setting('search_path')   AS search_path,
+              (SELECT count(*) FROM employees) AS employee_count,
+              (SELECT string_agg(name, ', ' ORDER BY id) FROM employees) AS employee_names`
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // ════════════════════════════════════ Helpers ═══════════════════════════════════
 /** Run fn inside a BEGIN/COMMIT transaction; rolls back on error. */
 async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
