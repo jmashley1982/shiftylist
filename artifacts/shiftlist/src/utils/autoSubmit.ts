@@ -1,5 +1,6 @@
 import { pool } from "../db/index.js";
 import { logger } from "../lib/logger.js";
+import { isWorkers } from "../lib/runtime.js";
 import { getBusinessDayStr } from "./dateHelpers.js";
 
 const CUTOFF_HOUR = 1; // 1:00 AM local time
@@ -126,4 +127,16 @@ export async function sweepStaleSessions(): Promise<void> {
     // caught here so the caller is never rejected.
     logger.error({ err }, "sweepStaleSessions: unexpected error during sweep");
   }
+}
+
+/**
+ * Fire-and-forget variant for route handlers.
+ *
+ * On Workers this is a no-op: the request's database pool is closed as soon as
+ * the response finishes, so work outliving the response would query a closed
+ * pool. The Cron Trigger in worker.ts runs the sweep there instead.
+ */
+export function sweepStaleSessionsOnRequest(): void {
+  if (isWorkers()) return;
+  void sweepStaleSessions();
 }

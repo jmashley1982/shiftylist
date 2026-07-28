@@ -26,6 +26,14 @@ ALTER TABLE task_completions ADD COLUMN IF NOT EXISTS late_reason TEXT;
 -- Add auto_submitted flag to submissions (idempotent)
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS auto_submitted BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Login sessions (express-session store; also in the Drizzle schema)
+CREATE TABLE IF NOT EXISTS sessions (
+  sid    TEXT PRIMARY KEY,
+  sess   JSONB NOT NULL,
+  expire TIMESTAMPTZ(6) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions (expire);
+
 -- Staff notice (admin-written pop-up shown to staff after login)
 CREATE TABLE IF NOT EXISTS staff_notice (
   id         SERIAL PRIMARY KEY,

@@ -1,3 +1,6 @@
-import { db } from "@workspace/db";
-
-export const pool = db.$client;
+export {
+  pool,
+  createPool,
+  runWithPool,
+  setConnectionStringResolver,
+} from "@workspace/db";

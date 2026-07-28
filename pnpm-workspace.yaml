@@ -74,6 +74,8 @@ onlyBuiltDependencies:
   - esbuild
   - msw
   - unrs-resolver
+  # workerd is the Cloudflare Workers runtime that `wrangler dev` runs locally
+  - workerd
 
 overrides:
   # replit uses linux-x64 only, we can exclude all other platforms

@@ -1,0 +1,71 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "shiftylist",
+  "main": "./src/worker.ts",
+
+  // >= 2025-08-15 for httpServerHandler, >= 2025-09-01 for the node:fs stubs,
+  // >= 2025-04-01 for process.env being populated from vars and secrets.
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "workers_dev": true,
+
+  // Served at the edge before the Worker runs, so /style.css, /vvas-logo.png
+  // and /shiftylist-logo.png never reach Express. `not_found_handling` is
+  // deliberately unset (defaults to "none") so every other path falls through
+  // to the Worker — "single-page-application" would swallow /login and /admin/*.
+  "assets": {
+    "directory": "./public"
+  },
+
+  // Create with:
+  //   npx wrangler hyperdrive create shiftylist-db --connection-string="postgres://..."
+  // then paste the returned id here.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "REPLACE_WITH_HYPERDRIVE_ID",
+      // Used only by `wrangler dev` — point it at a local or dev Postgres.
+      "localConnectionString": "postgres://postgres:postgres@localhost:5432/shiftlist"
+    }
+  ],
+
+  "vars": {
+    "NODE_ENV": "production",
+    "LOG_LEVEL": "info",
+    "STORE_TIMEZONE": "America/Chicago"
+  },
+
+  // SESSION_SECRET and ADMIN_CODE are secrets, not vars:
+  //   npx wrangler secret put SESSION_SECRET
+  //   npx wrangler secret put ADMIN_CODE
+  // ADMIN_CODE falls back to "1234" if unset — set it before going live.
+
+  "observability": {
+    "enabled": true
+  },
+
+  "limits": {
+    // Workers Paid only. Express routing plus an EJS render of the larger
+    // admin pages will not fit in the Free plan's 10 ms CPU ceiling.
+    "cpu_ms": 30000
+  },
+
+  "placement": {
+    // Run the isolate near Hyperdrive's origin connection — the admin pages
+    // issue several sequential queries per request.
+    "mode": "smart"
+  },
+
+  // Hourly: auto-submits stale shift sessions and prunes expired logins.
+  "triggers": {
+    "crons": ["5 * * * *"]
+  }
+
+  // Once shiftylist.app is an active zone on this account, add:
+  //
+  // "routes": [{ "pattern": "shiftylist.app", "custom_domain": true }]
+  //
+  // Deploying with this set before the zone exists fails, so it stays
+  // commented out until the domain is on Cloudflare.
+}

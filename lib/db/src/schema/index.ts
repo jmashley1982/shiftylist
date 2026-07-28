@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, unique, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, unique, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 export const employees = pgTable("employees", {
@@ -115,3 +115,15 @@ export const activeSessions = pgTable("active_sessions", {
 ]);
 
 export type ActiveSession = typeof activeSessions.$inferSelect;
+
+// Login sessions (express-session store). Workers isolates are short-lived, so
+// sessions cannot live in process memory — see artifacts/shiftlist/src/lib/sessionStore.ts
+export const sessions = pgTable("sessions", {
+  sid: text("sid").primaryKey(),
+  sess: jsonb("sess").notNull(),
+  expire: timestamp("expire", { withTimezone: true, precision: 6 }).notNull(),
+}, (table) => [
+  index("idx_sessions_expire").on(table.expire),
+]);
+
+export type SessionRow = typeof sessions.$inferSelect;
