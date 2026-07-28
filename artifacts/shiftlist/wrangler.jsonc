@@ -62,10 +62,17 @@
     "crons": ["5 * * * *"]
   }
 
-  // Once shiftylist.app is an active zone on this account, add:
+  // The Viking store's instance lives on the subdomain; the apex is left alone.
   //
-  // "routes": [{ "pattern": "shiftylist.app", "custom_domain": true }]
+  // "routes": [{ "pattern": "viking.shiftylist.app", "custom_domain": true }]
   //
-  // Deploying with this set before the zone exists fails, so it stays
-  // commented out until the domain is on Cloudflare.
+  // Left commented out on purpose: viking.shiftylist.app currently points at
+  // the Replit deployment, and attaching a custom domain *replaces* that DNS
+  // record. Uncommenting and deploying is therefore the cutover itself, not a
+  // preparatory step. Verify on the workers.dev URL first.
+  //
+  // If the deploy is refused because a DNS record already exists for the
+  // hostname, delete the Replit CNAME first (or accept the override prompt in
+  // the dashboard). To roll back: remove the custom domain and re-point the
+  // CNAME at Replit.
 }

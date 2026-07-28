@@ -21,8 +21,9 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 
 ## Deploying to Cloudflare
 
-Production runs as a Cloudflare Worker at **shiftylist.app**. See
-`artifacts/shiftlist/wrangler.jsonc`.
+Production runs as a Cloudflare Worker at **viking.shiftylist.app** — the
+Viking Vapor & Smoke store's instance. The `shiftylist.app` apex is not served
+by this Worker. See `artifacts/shiftlist/wrangler.jsonc`.
 
 ```
 pnpm --filter @workspace/shiftlist run cf:dev      # local, needs a Postgres on :5432
@@ -39,6 +40,20 @@ Pieces:
 - **Views** are inlined into the bundle by `scripts/gen-views.mjs`, because
   Workers have no filesystem to read `views/*.ejs` from.
 - **Deploys** run through Workers Builds on every push to `main`.
+
+### Cutting over from Replit
+
+`viking.shiftylist.app` pointed at the Replit deployment. Attaching the Worker's
+custom domain replaces that DNS record, so the order matters:
+
+1. Deploy and verify on the `workers.dev` URL, with Replit still serving live
+   traffic.
+2. Take a final `pg_dump` from Replit into Neon during closed hours — the store
+   is idle overnight — and check row counts.
+3. Uncomment the `routes` block and deploy. That is the cutover.
+4. Leave the Replit deployment running until the store has worked a full shift
+   on Cloudflare. To roll back, remove the custom domain and re-point the CNAME
+   at Replit.
 
 ### Workers constraints that the code depends on
 
