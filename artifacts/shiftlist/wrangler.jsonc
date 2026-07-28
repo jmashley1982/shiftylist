@@ -18,13 +18,16 @@
     "directory": "./public"
   },
 
-  // Create with:
-  //   npx wrangler hyperdrive create shiftylist-db --connection-string="postgres://..."
-  // then paste the returned id here.
+  // Points at the Neon database. Query caching must stay OFF:
+  //   npx wrangler hyperdrive update <id> --caching-disabled
+  // Hyperdrive does not invalidate cached reads on write, and this app is
+  // read-after-write throughout — a standing task added by an admin is meant
+  // to be live for staff immediately, with no publish step. Connection
+  // pooling, the reason we use Hyperdrive, is unaffected by disabling it.
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "REPLACE_WITH_HYPERDRIVE_ID",
+      "id": "a386fd3968494978bebe2debe8544f11",
       // Used only by `wrangler dev` — point it at a local or dev Postgres.
       "localConnectionString": "postgres://postgres:postgres@localhost:5432/shiftlist"
     }
