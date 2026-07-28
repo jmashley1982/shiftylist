@@ -12,7 +12,7 @@ router.use(ensureAdminAuth);
  * TEMPORARY diagnostic — reports which database the Worker is actually talking
  * to. Admin-gated. Remove once the Neon/Hyperdrive wiring is confirmed.
  */
-router.get("/admin/__dbinfo", async (_req, res) => {
+router.get("/__dbinfo", async (_req, res) => {
   try {
     const result = await pool.query(
       `SELECT current_database()               AS database,
