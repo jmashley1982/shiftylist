@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Shifts</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <%- include('../partials/admin-nav', { active: 'shifts' }) %>
@@ -17,7 +17,7 @@
     <% if (shifts.length === 0) { %>
       <div class="panel">
         <div class="panel-header"><h2>Create your first shift</h2></div>
-        <form method="POST" action="/admin/shifts/add" class="form-stack">
+        <form method="POST" action="<%= adminUrl('/build/add') %>" class="form-stack">
           <div class="form-group">
             <label>Shift name</label>
             <input type="text" name="name" placeholder="e.g. Open, Mid, Close" required autofocus>
@@ -34,7 +34,7 @@
       <!-- ─────────────────── ADD A TASK ─────────────────── -->
       <div class="panel" style="margin-bottom:16px;">
         <div class="panel-header"><h2>Add a Task</h2></div>
-        <form method="POST" action="/admin/shifts/add-task" id="addTaskForm">
+        <form method="POST" action="<%= adminUrl('/build/add-task') %>" id="addTaskForm">
 
           <div style="margin-bottom:12px;">
             <input type="text" name="name" list="taskSuggestions"
@@ -102,7 +102,7 @@
       <% if (selectedShift) { %>
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
           <% shifts.forEach(function(s) { %>
-            <a href="/admin/shifts?shift=<%= s.id %>"
+            <a href="<%= adminUrl('/build') %>?shift=<%= s.id %>"
                class="btn btn-sm <%= s.id === selectedShift.id ? 'btn-primary' : 'btn-ghost' %>"
                style="flex:1; min-width:80px;"><%= s.name %></a>
           <% }); %>
@@ -121,20 +121,20 @@
 
           <% if (standingTasks.length > 0) { %>
             <div class="task-edit-list"
-                 data-reorder-url="/admin/shifts/<%= selectedShift.id %>/standing/reorder">
+                 data-reorder-url="<%= adminUrl('/build/' + selectedShift.id + '/standing/reorder') %>">
               <% standingTasks.forEach(function(task, idx) { %>
                 <div class="task-row" draggable="true" data-id="<%= task.id %>">
                   <span class="drag-handle" title="Drag to reorder">⠿</span>
                   <span class="task-num"><%= idx + 1 %>.</span>
                   <span class="task-edit-name" contenteditable="true" spellcheck="false"
-                        data-rename-url="/admin/shifts/<%= selectedShift.id %>/standing/rename/<%= task.id %>"><%= task.task_name %></span>
+                        data-rename-url="<%= adminUrl('/build/' + selectedShift.id + '/standing/rename/' + task.id) %>"><%= task.task_name %></span>
                   <button type="button" class="btn btn-sm btn-ghost task-time-toggle"
                           data-panel="tpanel-s-<%= task.id %>"
-                          data-set-url="/admin/shifts/<%= selectedShift.id %>/standing/set-time/<%= task.id %>"
+                          data-set-url="<%= adminUrl('/build/' + selectedShift.id + '/standing/set-time/' + task.id) %>"
                           data-ts="<%= task.time_start || '' %>"
                           data-te="<%= task.time_end || '' %>"
                           style="min-height:28px; padding:3px 7px; font-size:0.7rem; flex-shrink:0;" title="Set time window">⏱</button>
-                  <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/standing/remove/<%= task.id %>"
+                  <form method="POST" action="<%= adminUrl('/build/' + selectedShift.id + '/standing/remove/' + task.id) %>"
                         onsubmit="return confirm('Remove this task from the standing list?')" style="flex-shrink:0;">
                     <button type="submit" class="btn btn-danger btn-sm">✕</button>
                   </form>
@@ -167,7 +167,7 @@
           </div>
 
           <!-- Date browser -->
-          <form method="GET" action="/admin/shifts" id="extraDateForm"
+          <form method="GET" action="<%= adminUrl('/build') %>" id="extraDateForm"
                 style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
             <input type="hidden" name="shift" value="<%= selectedShift.id %>">
             <label style="font-size:0.83rem; color:var(--muted); white-space:nowrap;">Browse date:</label>
@@ -175,7 +175,7 @@
                    style="font-size:0.9rem; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
             <button type="submit" class="btn btn-sm btn-ghost">Go</button>
             <% if (extraDate !== today) { %>
-              <a href="/admin/shifts?shift=<%= selectedShift.id %>" class="btn btn-sm btn-ghost" style="font-size:0.8rem;">← Today</a>
+              <a href="<%= adminUrl('/build') %>?shift=<%= selectedShift.id %>" class="btn btn-sm btn-ghost" style="font-size:0.8rem;">← Today</a>
             <% } %>
             <span style="font-size:0.8rem; color:var(--muted);">
               <%= extraDate === today ? 'Showing today\'s extras' : 'Showing extras for ' + formatDateDisplay(extraDate) %>
@@ -187,16 +187,16 @@
               <% extraTasks.forEach(function(task) { %>
                 <div class="extra-task-row" style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border);">
                   <span class="extra-task-name" contenteditable="true" spellcheck="false"
-                        data-rename-url="/admin/shifts/<%= selectedShift.id %>/day/<%= extraDate %>/rename-extra/<%= task.id %>"
+                        data-rename-url="<%= adminUrl('/build/' + selectedShift.id + '/day/' + extraDate + '/rename-extra/' + task.id) %>"
                         style="flex:1; font-size:0.9rem; outline:none; border-radius:4px; padding:2px 4px;"
                         ><%= task.task_name %></span>
                   <button type="button" class="btn btn-sm btn-ghost task-time-toggle"
                           data-panel="tpanel-e-<%= task.id %>"
-                          data-set-url="/admin/shifts/<%= selectedShift.id %>/day/<%= extraDate %>/set-time-extra/<%= task.id %>"
+                          data-set-url="<%= adminUrl('/build/' + selectedShift.id + '/day/' + extraDate + '/set-time-extra/' + task.id) %>"
                           data-ts="<%= task.time_start || '' %>"
                           data-te="<%= task.time_end || '' %>"
                           style="min-height:28px; padding:3px 7px; font-size:0.7rem; flex-shrink:0;" title="Set time window">⏱</button>
-                  <form method="POST" action="/admin/shifts/<%= selectedShift.id %>/day/<%= extraDate %>/remove-extra/<%= task.id %>"
+                  <form method="POST" action="<%= adminUrl('/build/' + selectedShift.id + '/day/' + extraDate + '/remove-extra/' + task.id) %>"
                         onsubmit="return confirm('Remove this extra task?')" style="flex-shrink:0;">
                     <button type="submit" class="btn btn-danger btn-sm">✕</button>
                   </form>
@@ -226,7 +226,7 @@
       <!-- ─────────────────── MANAGE SHIFTS ─────────────────── -->
       <div class="panel">
         <div class="panel-header"><h2 style="font-size:1rem;">Manage shifts</h2></div>
-        <form method="POST" action="/admin/shifts/add" style="display:flex; gap:8px; margin-bottom:12px;">
+        <form method="POST" action="<%= adminUrl('/build/add') %>" style="display:flex; gap:8px; margin-bottom:12px;">
           <input type="text" name="name" placeholder="New shift name…" required style="flex:1;">
           <button type="submit" class="btn btn-primary btn-sm">Add</button>
         </form>
@@ -234,7 +234,7 @@
           <% shifts.forEach(function(s) { %>
             <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border);">
               <span style="flex:1; font-size:0.9rem;"><%= s.name %></span>
-              <form method="POST" action="/admin/shifts/delete/<%= s.id %>" onsubmit="return confirm('Delete the <%= s.name %> shift and its entire checklist?')">
+              <form method="POST" action="<%= adminUrl('/build/delete/' + s.id) %>" onsubmit="return confirm('Delete the <%= s.name %> shift and its entire checklist?')">
                 <button type="submit" class="btn btn-danger btn-sm">✕</button>
               </form>
             </div>
@@ -331,7 +331,7 @@
       function handleSessionExpired(r) {
         if (r.redirected) {
           showToast('Session expired — please log back in', true);
-          setTimeout(function() { window.location.href = '/admin/login'; }, 1500);
+          setTimeout(function() { window.location.href = '/admin'; }, 1500);
           return true;
         }
         return false;

@@ -9,6 +9,7 @@ import { isWorkers } from "./lib/runtime.js";
 import { BundledView } from "./lib/views.js";
 import { PgSessionStore } from "./lib/sessionStore.js";
 import { createPool, runWithPool } from "./db/index.js";
+import { staffUrl, adminUrl } from "./lib/urls.js";
 
 const isProduction = process.env["NODE_ENV"] === "production";
 const onWorkers = isWorkers();
@@ -67,6 +68,14 @@ app.set("view engine", "ejs");
 // Templates are baked into the bundle rather than read from disk — Workers
 // have no persistent filesystem. See src/lib/views.ts.
 app.set("view", BundledView);
+
+// Every template can call staffUrl(...)/adminUrl(...) directly instead of
+// hardcoding the /staff or /admin/shifts prefix — see src/lib/urls.ts.
+app.use((_req, res, next) => {
+  res.locals.staffUrl = staffUrl;
+  res.locals.adminUrl = adminUrl;
+  next();
+});
 
 if (!onWorkers) {
   // On Workers this is served by the Static Assets binding before a request

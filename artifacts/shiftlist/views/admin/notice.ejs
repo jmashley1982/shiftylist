@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Staff Notice</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <%- include('../partials/admin-nav', { active: 'notice' }) %>
@@ -25,7 +25,7 @@
 
       <!-- ── Editor ── -->
       <div style="flex:1; min-width:260px;">
-        <form method="POST" action="/admin/notice">
+        <form method="POST" action="<%= adminUrl('/notice') %>">
           <div class="panel" style="margin-bottom:0;">
             <div style="display:flex; flex-direction:column; gap:14px;">
 

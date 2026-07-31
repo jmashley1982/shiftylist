@@ -6,7 +6,6 @@ declare module "express-session" {
     employeeName?: string;
     selectedShiftId?: number;
     employeeCode?: string;
-    isAdmin?: boolean;
     pendingEmployee?: {
       id: number;
       name: string;

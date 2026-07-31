@@ -10,10 +10,11 @@
 
   "workers_dev": true,
 
-  // Served at the edge before the Worker runs, so /style.css, /vvas-logo.png
-  // and /shiftylist-logo.png never reach Express. `not_found_handling` is
-  // deliberately unset (defaults to "none") so every other path falls through
-  // to the Worker — "single-page-application" would swallow /login and /admin/*.
+  // Served at the edge before the Worker runs, so /staff/style.css,
+  // /staff/vvas-logo.png etc. never reach Express. `not_found_handling` is
+  // deliberately unset (defaults to "none") so every other path under our
+  // routes falls through to the Worker — "single-page-application" would
+  // swallow /staff and /admin/shifts/*.
   "assets": {
     "directory": "./public"
   },
@@ -39,10 +40,12 @@
     "STORE_TIMEZONE": "America/Chicago"
   },
 
-  // SESSION_SECRET and ADMIN_CODE are secrets, not vars:
+  // SESSION_SECRET is a secret, not a var:
   //   npx wrangler secret put SESSION_SECRET
-  //   npx wrangler secret put ADMIN_CODE
-  // ADMIN_CODE falls back to "1234" if unset — set it before going live.
+  // It must be the EXACT same value as jmashley1982/viking-product-ordering's
+  // SESSION_SECRET — /admin/shifts verifies that app's session cookie instead
+  // of having its own login. A mismatch bounces every manager back to /admin.
+  // There is no ADMIN_CODE anymore; the old ShiftList admin login is gone.
 
   "observability": {
     "enabled": true
@@ -63,19 +66,26 @@
   // Hourly: auto-submits stale shift sessions and prunes expired logins.
   "triggers": {
     "crons": ["5 * * * *"]
-  }
+  },
 
-  // The Viking store's instance lives on the subdomain; the apex is left alone.
+  // shiftylist.app is retired — ShiftList now lives on the business's own
+  // domain, as two path prefixes on a zone the storefront Worker
+  // (jmashley1982/viking) and the ordering/admin Worker
+  // (jmashley1982/viking-product-ordering) already share:
   //
-  // "routes": [{ "pattern": "viking.shiftylist.app", "custom_domain": true }]
+  //   vikingvaporandsmoke.com/staff*         → staff checklist app
+  //   vikingvaporandsmoke.com/admin/shifts*  → shift management, folded
+  //                                             into the existing admin
   //
-  // Left commented out on purpose: viking.shiftylist.app currently points at
-  // the Replit deployment, and attaching a custom domain *replaces* that DNS
-  // record. Uncommenting and deploying is therefore the cutover itself, not a
-  // preparatory step. Verify on the workers.dev URL first.
+  // Cloudflare matches the most specific route, so /admin/shifts* here wins
+  // over the ordering app's /admin* — the same mechanism that app already
+  // relies on for /admin vs. /ordering. Both prefixes are otherwise unused
+  // by either of those repos.
   //
-  // If the deploy is refused because a DNS record already exists for the
-  // hostname, delete the Replit CNAME first (or accept the override prompt in
-  // the dashboard). To roll back: remove the custom domain and re-point the
-  // CNAME at Replit.
+  // Deploying this does not require touching either other repo: it only
+  // claims two path prefixes on a zone this Worker doesn't otherwise serve.
+  "routes": [
+    { "pattern": "vikingvaporandsmoke.com/staff*", "zone_name": "vikingvaporandsmoke.com" },
+    { "pattern": "vikingvaporandsmoke.com/admin/shifts*", "zone_name": "vikingvaporandsmoke.com" }
+  ]
 }

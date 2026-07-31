@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Report Submitted</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <div class="page-center">
@@ -37,10 +37,10 @@
         <% } %>
       </ul>
 
-      <a href="/logout" class="btn btn-primary btn-full">Log Out</a>
+      <a href="<%= staffUrl('/logout') %>" class="btn btn-primary btn-full">Log Out</a>
       <div class="powered-by">
         <span>Powered by</span>
-        <img src="/shiftylist-logo.png" alt="ShiftyList">
+        <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList">
       </div>
     </div>
   </div>

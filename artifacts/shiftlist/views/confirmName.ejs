@@ -4,27 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Confirm Identity</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <div class="page-center">
     <div class="card">
-      <img src="/vvas-logo.png" alt="Viking Vapor & Smoke" class="card-logo">
+      <img src="<%= staffUrl('/vvas-logo.png') %>" alt="Viking Vapor & Smoke" class="card-logo">
       <p style="font-size:0.88rem; color:var(--muted); margin-bottom:4px;">Is this you?</p>
       <div class="name-confirm"><%= employee.name %></div>
       <div class="btn-row">
-        <form method="POST" action="/confirm-name">
+        <form method="POST" action="<%= staffUrl('/confirm-name') %>">
           <input type="hidden" name="confirm" value="yes">
           <button type="submit" class="btn btn-primary btn-full">Yes, that's me</button>
         </form>
-        <form method="POST" action="/confirm-name">
+        <form method="POST" action="<%= staffUrl('/confirm-name') %>">
           <input type="hidden" name="confirm" value="no">
           <button type="submit" class="btn btn-ghost btn-full">Not me</button>
         </form>
       </div>
       <div class="powered-by">
         <span>Powered by</span>
-        <img src="/shiftylist-logo.png" alt="ShiftyList">
+        <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList">
       </div>
     </div>
   </div>

@@ -2,8 +2,15 @@ import { Router } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db/index.js";
 import { ensureAdminAuth } from "../middleware/auth.js";
+import { adminUrl } from "../lib/urls.js";
 import { getTodayStr, getBusinessDayStr, formatDateDisplay, formatLocalTime } from "../utils/dateHelpers.js";
 import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
+
+// Mounted at /admin/shifts. There is no login here anymore — ensureAdminAuth
+// trusts the Viking ordering app's session cookie (see
+// src/middleware/vikingAuth.ts). "/dashboard" is now the mount root, and the
+// shift-checklist builder — formerly "/shifts", now redundant with the mount
+// prefix — lives at "/build".
 
 const router = Router();
 router.use(ensureAdminAuth);
@@ -38,7 +45,7 @@ async function upsertTaskByName(client: PoolClient, name: string): Promise<numbe
 
 /** Build the redirect URL back to the shifts hub, preserving shift and optional extraDate. */
 function hubUrl(shiftId: number | string, extraDate?: string): string {
-  const base = `/admin/shifts?shift=${shiftId}`;
+  const base = `${adminUrl("/build")}?shift=${shiftId}`;
   return extraDate ? `${base}&extraDate=${extraDate}` : base;
 }
 
@@ -64,7 +71,8 @@ async function bulkRenormalizeOrder(
 }
 
 // ════════════════════════════════════ Dashboard ═════════════════════════════════
-router.get("/dashboard", async (_req, res) => {
+// The mount root — /admin/shifts itself is the landing page.
+router.get("/", async (_req, res) => {
   const today = getBusinessDayStr();
 
   // Previous business day: subtract one calendar day from today's date string
@@ -138,14 +146,14 @@ router.get("/employees", async (_req, res) => {
 
 router.post("/employees/add", async (req, res) => {
   const { name, code } = req.body as { name: string; code: string };
-  if (!name || !code) return void res.redirect("/admin/employees");
+  if (!name || !code) return void res.redirect(adminUrl("/employees"));
   if (!/^\d{4}$/.test(code)) {
     const employees = (await pool.query("SELECT * FROM employees ORDER BY name")).rows;
     return void res.render("admin/employees", { employees, error: "Code must be exactly 4 digits." });
   }
   try {
     await pool.query("INSERT INTO employees (name, code) VALUES ($1, $2)", [name.trim(), code]);
-    res.redirect("/admin/employees");
+    res.redirect(adminUrl("/employees"));
   } catch {
     const employees = (await pool.query("SELECT * FROM employees ORDER BY name")).rows;
     res.render("admin/employees", { employees, error: "That code is already in use." });
@@ -154,11 +162,11 @@ router.post("/employees/add", async (req, res) => {
 
 router.post("/employees/delete/:id", async (req, res) => {
   await pool.query("DELETE FROM employees WHERE id = $1", [Number(req.params.id)]);
-  res.redirect("/admin/employees");
+  res.redirect(adminUrl("/employees"));
 });
 
 // ════════════════════════════════════ Shifts hub ════════════════════════════════
-router.get("/shifts", async (req, res) => {
+router.get("/build", async (req, res) => {
   const today = getTodayStr();
   const shifts = (await pool.query(
     `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
@@ -212,7 +220,7 @@ router.get("/shifts", async (req, res) => {
 });
 
 // ── Add a Task (unified: daily → standing list, one-off → extra day tasks) ────
-router.post("/shifts/add-task", async (req, res) => {
+router.post("/build/add-task", async (req, res) => {
   const body = req.body as {
     name?: string;
     type?: string;
@@ -223,7 +231,7 @@ router.post("/shifts/add-task", async (req, res) => {
   };
 
   const name = body.name?.trim();
-  if (!name) return void res.redirect("/admin/shifts");
+  if (!name) return void res.redirect(adminUrl("/build"));
 
   const type = body.type === "daily" ? "daily" : "oneoff";
   const rawIds = Array.isArray(body.shiftIds)
@@ -236,7 +244,7 @@ router.post("/shifts/add-task", async (req, res) => {
   const timeStart = body.time_start?.trim() || null;
   const timeEnd = body.time_end?.trim() || null;
 
-  if (shiftIds.length === 0) return void res.redirect("/admin/shifts");
+  if (shiftIds.length === 0) return void res.redirect(adminUrl("/build"));
 
   if (type === "daily") {
     await withTransaction(async (client) => {
@@ -270,11 +278,11 @@ router.post("/shifts/add-task", async (req, res) => {
     }
   }
 
-  res.redirect(shiftIds.length === 1 ? hubUrl(shiftIds[0]) : "/admin/shifts");
+  res.redirect(shiftIds.length === 1 ? hubUrl(shiftIds[0]) : adminUrl("/build"));
 });
 
 // ── Shift types ──────────────────────────────────────────────────────────────
-router.post("/shifts/add", async (req, res) => {
+router.post("/build/add", async (req, res) => {
   const { name } = req.body as { name: string };
   if (name?.trim()) {
     const r = await pool.query(
@@ -283,16 +291,16 @@ router.post("/shifts/add", async (req, res) => {
     );
     if (r.rows[0]) return void res.redirect(hubUrl(r.rows[0].id));
   }
-  res.redirect("/admin/shifts");
+  res.redirect(adminUrl("/build"));
 });
 
-router.post("/shifts/delete/:id", async (req, res) => {
+router.post("/build/delete/:id", async (req, res) => {
   await pool.query("DELETE FROM shifts WHERE id = $1", [Number(req.params.id)]);
-  res.redirect("/admin/shifts");
+  res.redirect(adminUrl("/build"));
 });
 
 // ── Standing list (always live) ──────────────────────────────────────────────
-router.post("/shifts/:shiftId/standing/add", async (req, res) => {
+router.post("/build/:shiftId/standing/add", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
   const name = (req.body.name as string)?.trim();
   const wantsJson = req.headers.accept?.includes("application/json") ?? false;
@@ -341,12 +349,12 @@ router.post("/shifts/:shiftId/standing/add", async (req, res) => {
   res.redirect(hubUrl(shiftId));
 });
 
-router.post("/shifts/:shiftId/standing/remove/:id", async (req, res) => {
+router.post("/build/:shiftId/standing/remove/:id", async (req, res) => {
   await pool.query("DELETE FROM shift_tasks WHERE id = $1", [Number(req.params.id)]);
   res.redirect(hubUrl(req.params.shiftId));
 });
 
-router.post("/shifts/:shiftId/standing/rename/:id", async (req, res) => {
+router.post("/build/:shiftId/standing/rename/:id", async (req, res) => {
   const shiftTaskId = Number(req.params.id);
   const shiftId = Number(req.params.shiftId);
   const name = (req.body.name as string)?.trim();
@@ -361,7 +369,7 @@ router.post("/shifts/:shiftId/standing/rename/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/shifts/:shiftId/standing/reorder", async (req, res) => {
+router.post("/build/:shiftId/standing/reorder", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
   const ids = (req.body.ids as unknown[]);
   if (!Array.isArray(ids) || ids.length === 0) return void res.json({ ok: false });
@@ -374,7 +382,7 @@ router.post("/shifts/:shiftId/standing/reorder", async (req, res) => {
 });
 
 // ── Extra tasks for a specific day ──────────────────────────────────────────
-router.post("/shifts/:shiftId/standing/set-time/:id", async (req, res) => {
+router.post("/build/:shiftId/standing/set-time/:id", async (req, res) => {
   const id = Number(req.params.id);
   const shiftId = Number(req.params.shiftId);
   const body = req.body as { time_start?: string; time_end?: string };
@@ -387,12 +395,12 @@ router.post("/shifts/:shiftId/standing/set-time/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/shifts/:shiftId/day/:date/remove-extra/:id", async (req, res) => {
+router.post("/build/:shiftId/day/:date/remove-extra/:id", async (req, res) => {
   await pool.query("DELETE FROM extra_day_tasks WHERE id = $1", [Number(req.params.id)]);
   res.redirect(hubUrl(req.params.shiftId, req.params.date));
 });
 
-router.post("/shifts/:shiftId/day/:date/rename-extra/:id", async (req, res) => {
+router.post("/build/:shiftId/day/:date/rename-extra/:id", async (req, res) => {
   const id = Number(req.params.id);
   const name = (req.body.name as string)?.trim();
   if (!name) return void res.json({ ok: false, error: "Name required" });
@@ -403,7 +411,7 @@ router.post("/shifts/:shiftId/day/:date/rename-extra/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/shifts/:shiftId/day/:date/set-time-extra/:id", async (req, res) => {
+router.post("/build/:shiftId/day/:date/set-time-extra/:id", async (req, res) => {
   const id = Number(req.params.id);
   const shiftId = Number(req.params.shiftId);
   const { date } = req.params;
@@ -417,7 +425,7 @@ router.post("/shifts/:shiftId/day/:date/set-time-extra/:id", async (req, res) =>
   res.json({ ok: true });
 });
 
-router.post("/shifts/:shiftId/day/:date/reorder-extra", async (req, res) => {
+router.post("/build/:shiftId/day/:date/reorder-extra", async (req, res) => {
   const shiftId = Number(req.params.shiftId);
   const { date } = req.params;
   const ids = (req.body.ids as unknown[]);
@@ -659,7 +667,7 @@ router.post("/notice", async (req, res) => {
     [title, subtitle, body]
   );
 
-  res.redirect("/admin/notice?saved=1");
+  res.redirect(`${adminUrl("/notice")}?saved=1`);
 });
 
 export default router;

@@ -4,19 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Staff Login</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <div class="page-center">
     <div class="card">
-      <img src="/vvas-logo.png" alt="Viking Vapor & Smoke" class="card-logo">
+      <img src="<%= staffUrl('/vvas-logo.png') %>" alt="Viking Vapor & Smoke" class="card-logo">
       <p class="subtitle text-center">Enter your 4-digit code to start</p>
 
       <% if (error) { %>
         <div class="alert alert-error"><%= error %></div>
       <% } %>
 
-      <form method="POST" action="/login">
+      <form method="POST" action="<%= staffUrl() %>">
         <div class="form-group">
           <label for="code">Your Code</label>
           <input
@@ -36,11 +36,11 @@
       </form>
 
       <div class="admin-link">
-        <a href="/admin/login">Admin access</a>
+        <a href="/admin">Admin access</a>
       </div>
       <div class="powered-by">
         <span>Powered by</span>
-        <img src="/shiftylist-logo.png" alt="ShiftyList">
+        <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList">
       </div>
     </div>
   </div>

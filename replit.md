@@ -21,9 +21,16 @@ A server-rendered internal web app for managing staff shift tasks. Staff log in 
 
 ## Deploying to Cloudflare
 
-Production runs as a Cloudflare Worker at **viking.shiftylist.app** — the
-Viking Vapor & Smoke store's instance. The `shiftylist.app` apex is not served
-by this Worker. See `artifacts/shiftlist/wrangler.jsonc`.
+Production runs as a Cloudflare Worker, folded directly into the business
+site rather than living at its own domain:
+
+- **Staff** use `vikingvaporandsmoke.com/staff` — 4-digit code, checklist, submit.
+- **Managers** use `vikingvaporandsmoke.com/admin/shifts` — a section of the
+  existing Viking dashboard, **with no separate login**. See
+  [Shared admin auth](#shared-admin-auth-no-second-login) below.
+
+`shiftylist.app` and `viking.shiftylist.app` (the old Replit domain) are
+retired. See `artifacts/shiftlist/wrangler.jsonc`.
 
 ```
 pnpm --filter @workspace/shiftlist run cf:dev      # local, needs a Postgres on :5432
@@ -36,24 +43,48 @@ Pieces:
 - **Postgres** lives at Neon; the Worker reaches it through a Cloudflare
   **Hyperdrive** binding (`env.HYPERDRIVE`). Run migrations against the direct
   Neon URL, never through Hyperdrive.
-- **`public/`** is served by Workers Static Assets, ahead of the Worker.
+- **`public/staff/`** is served by Workers Static Assets, ahead of the Worker,
+  at `/staff/*` — matching the one URL prefix this app owns on the zone.
 - **Views** are inlined into the bundle by `scripts/gen-views.mjs`, because
   Workers have no filesystem to read `views/*.ejs` from.
 - **Deploys** run through Workers Builds on every push to `main`.
+- **Routes**, not a custom domain: `vikingvaporandsmoke.com/staff*` and
+  `vikingvaporandsmoke.com/admin/shifts*` in `wrangler.jsonc`. The zone also
+  routes `/admin*` and `/ordering*` to a separate Worker — see
+  [Cloudflare topology](#cloudflare-topology-on-vikingvaporandsmokecom).
 
-### Cutting over from Replit
+### Shared admin auth (no second login)
 
-`viking.shiftylist.app` pointed at the Replit deployment. Attaching the Worker's
-custom domain replaces that DNS record, so the order matters:
+There is no ShiftList admin login. `/admin/shifts` verifies the session
+cookie set by `jmashley1982/viking-product-ordering` — the Worker that owns
+`vikingvaporandsmoke.com/admin` — instead of having its own
+(`src/middleware/vikingAuth.ts`, ported from that repo's `auth.ts`). A manager
+who is already logged into the dashboard clicks through to Shifts with no
+prompt; anyone else is redirected to `/admin` to log in there.
 
-1. Deploy and verify on the `workers.dev` URL, with Replit still serving live
-   traffic.
-2. Take a final `pg_dump` from Replit into Neon during closed hours — the store
-   is idle overnight — and check row counts.
-3. Uncomment the `routes` block and deploy. That is the cutover.
-4. Leave the Replit deployment running until the store has worked a full shift
-   on Cloudflare. To roll back, remove the custom domain and re-point the CNAME
-   at Replit.
+This means **`SESSION_SECRET` on this Worker must be the exact same value**
+as the ordering app's `SESSION_SECRET`. A mismatch doesn't error — it just
+silently bounces every manager back to `/admin`, which is the first thing to
+check if Shifts stops recognizing a logged-in session.
+
+### Cloudflare topology on vikingvaporandsmoke.com
+
+Three Workers, three repos, one zone, no service bindings between them —
+routing is the only thing that ties them together:
+
+| Worker | Repo | Routes |
+|---|---|---|
+| `viking` | `jmashley1982/viking` | everything else (storefront) |
+| `viking-product-ordering` | `jmashley1982/viking-product-ordering` | `/admin*`, `/ordering*` |
+| `shiftylist` (this repo) | `jmashley1982/shiftylist` | `/staff*`, `/admin/shifts*` |
+
+Cloudflare matches the most specific route, so `/admin/shifts*` here wins
+over the ordering app's `/admin*` — the same mechanism that app already
+relies on for `/admin` vs. `/ordering`. The storefront Worker runs with
+`not_found_handling: "single-page-application"`, so a request to a path none
+of the above actually owns doesn't 404 — it silently renders the marketing
+homepage with HTTP 200. If a link or redirect in this app is wrong, that's
+what it looks like; check the response body, not just the status code.
 
 ### Workers constraints that the code depends on
 
@@ -76,7 +107,10 @@ These are load-bearing — changing them will break production:
 - App setup (session, EJS, middleware): `artifacts/shiftlist/src/app.ts`
 - Routes: `artifacts/shiftlist/src/routes/` (auth, staff, admin, health)
 - Views (EJS): `artifacts/shiftlist/views/` and `views/admin/`
-- Static CSS: `artifacts/shiftlist/public/style.css`
+- Static CSS: `artifacts/shiftlist/public/staff/style.css`
+- URL prefixes: `artifacts/shiftlist/src/lib/urls.ts` — every redirect, link,
+  form action and `fetch()` is built from `staffUrl()`/`adminUrl()` rather
+  than a literal, so the two path prefixes this Worker owns live in one place
 - DB setup: `artifacts/shiftlist/src/db/index.ts` (wraps `@workspace/db` pool)
 - DB schema: `lib/db/src/schema/index.ts` (Drizzle ORM)
 - Date helpers: `artifacts/shiftlist/src/utils/dateHelpers.ts`
@@ -100,19 +134,23 @@ These are load-bearing — changing them will break production:
 
 ## Admin workflow model
 
-- The `/admin/shifts` hub uses `?shift=<id>` to select a shift and `?date=<yyyy-mm-dd>` to switch to per-day extra tasks mode.
+- The shift-checklist builder (`/admin/shifts/build`) uses `?shift=<id>` to select a shift and `?extraDate=<yyyy-mm-dd>` to switch to per-day extra tasks mode. `/admin/shifts` itself is the dashboard, not the builder.
 - Staff (`/staff/tasks`) always see the standing checklist plus any extra tasks added for today.
 - Tasks are created-or-reused by name via `INSERT … ON CONFLICT (name) DO UPDATE … RETURNING id`; the `tasks` table backs autocomplete suggestions.
 
 ## User preferences
-- Dark theme with teal (#38b6a0) accents matching the Viking Vapor & Smoke logo
+- Dark theme with teal (`#3ecfb2`) accents and Oswald/Space Mono type, matching
+  the design tokens on `vikingvaporandsmoke.com`'s dashboard
+  (`artifacts/shiftlist/public/staff/style.css`) — the mobile-friendly radius
+  and shadow geometry were kept as-is rather than matched, since this app is
+  used on a phone behind a counter
 - High contrast for readability in store lighting
 - Logo displayed on all login and staff-facing pages
 
 ## Gotchas
 
 - Run `pnpm install` after any change to `pnpm-workspace.yaml`.
-- Admin code defaults to `1234` if `ADMIN_CODE` env var is not set.
+- There is no `ADMIN_CODE` — see [Shared admin auth](#shared-admin-auth-no-second-login).
 - Database schema changes are managed via Drizzle. After schema changes, run `pnpm --filter @workspace/db run push-force` to update the dev DB (use `push-force` — plain `push` may prompt interactively about constraint renames).
 - The dev database is separate from production — when you publish, Replit will sync the schema to production.
 - One unique index (`shift_tasks_shift_id_display_order_idx`) was applied directly via SQL (not through Drizzle). If you re-provision the production DB, re-apply it: `CREATE UNIQUE INDEX IF NOT EXISTS shift_tasks_shift_id_display_order_idx ON shift_tasks (shift_id, display_order);`
@@ -127,8 +165,7 @@ These are load-bearing — changing them will break production:
 
 | Secret | Required for |
 |---|---|
-| `SESSION_SECRET` | ✅ Already set — session security |
-| `ADMIN_CODE` | Admin panel login (defaults to `1234` if unset) |
+| `SESSION_SECRET` | Session security, and verifying the Viking ordering app's login cookie — **must exactly match that app's `SESSION_SECRET`**, or every manager is bounced back to `/admin`. |
 | `DATABASE_URL` | Postgres connection (Node only — on Workers this comes from the Hyperdrive binding) |
 | `STORE_TIMEZONE` | Store's IANA timezone (defaults to `America/Chicago`). Set this if the store is not in the US Central timezone — e.g. `America/Denver`, `America/Los_Angeles`, `America/New_York`. Controls all date strings and displayed timestamps. |
 

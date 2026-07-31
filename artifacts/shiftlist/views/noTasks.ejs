@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>No Tasks Available</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <nav class="navbar">
-    <a href="/admin/dashboard" class="brand">
-      <img src="/vvas-logo.png" alt="VVAS">
-      <img src="/shiftylist-logo.png" alt="ShiftyList" class="brand-platform-logo">
+    <a href="<%= staffUrl('/tasks') %>" class="brand">
+      <img src="<%= staffUrl('/vvas-logo.png') %>" alt="VVAS">
+      <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList" class="brand-platform-logo">
     </a>
-    <a href="/logout" class="btn btn-ghost btn-sm" style="min-height:36px;padding:7px 12px;">Log out</a>
+    <a href="<%= staffUrl('/logout') %>" class="btn btn-ghost btn-sm" style="min-height:36px;padding:7px 12px;">Log out</a>
   </nav>
   <div class="main-content-notabs" style="display:flex; align-items:center; justify-content:center; min-height:calc(100dvh - 60px);">
     <div style="width:100%; max-width:400px;">
@@ -25,10 +25,10 @@
       </div>
       <div class="panel" style="text-align:center;">
         <div class="alert alert-info" style="margin-bottom:16px;">Ask your manager to publish today's shifts.</div>
-        <a href="/logout" class="btn btn-ghost btn-full">Log Out</a>
+        <a href="<%= staffUrl('/logout') %>" class="btn btn-ghost btn-full">Log Out</a>
         <div class="powered-by">
           <span>Powered by</span>
-          <img src="/shiftylist-logo.png" alt="ShiftyList">
+          <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList">
         </div>
       </div>
     </div>

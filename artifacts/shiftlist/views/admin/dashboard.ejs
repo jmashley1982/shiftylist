@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Dashboard</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <%- include('../partials/admin-nav', { active: 'dashboard' }) %>
@@ -63,7 +63,7 @@
           <div style="display:flex; flex-direction:column; gap:10px;" id="shiftStatusGrid">
             <% if (shiftData.length === 0) { %>
               <div class="panel" style="padding:14px 16px;">
-                <p style="color:var(--muted); font-size:0.88rem; margin:0;">No shifts set up yet. <a href="/admin/shifts" style="color:var(--brand);">Create one →</a></p>
+                <p style="color:var(--muted); font-size:0.88rem; margin:0;">No shifts set up yet. <a href="<%= adminUrl('/build') %>" style="color:var(--brand);">Create one →</a></p>
               </div>
             <% } %>
             <% shiftData.forEach(function(sd) { %>
@@ -120,7 +120,7 @@
         <div class="panel">
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:6px;">
             <h2 style="font-size:1rem; margin:0;">Staff Performance <span style="font-size:0.78rem; font-weight:400; color:var(--muted);">— last 30 days</span></h2>
-            <a href="/admin/reports" style="font-size:0.8rem; color:var(--brand); text-decoration:none; font-weight:600;">All reports →</a>
+            <a href="<%= adminUrl('/reports') %>" style="font-size:0.8rem; color:var(--brand); text-decoration:none; font-weight:600;">All reports →</a>
           </div>
           <% if (staffActivity.length === 0) { %>
             <p style="color:var(--muted); font-size:0.9rem; margin:0;">No submissions yet.</p>
@@ -128,7 +128,7 @@
             <div style="display:flex; flex-direction:column; gap:6px;">
               <% staffActivity.forEach(function(staff) { %>
                 <% var pct = staff.avg_completion_pct; %>
-                <a href="/admin/reports?employee=<%= encodeURIComponent(staff.employee_name) %>"
+                <a href="<%= adminUrl('/reports') %>?employee=<%= encodeURIComponent(staff.employee_name) %>"
                    style="display:flex; align-items:center; gap:12px; text-decoration:none; padding:10px 12px; background:var(--surface2); border-radius:8px; border:1px solid var(--border); transition:border-color 0.15s;"
                    onmouseover="this.style.borderColor='var(--brand)'" onmouseout="this.style.borderColor='var(--border)'">
                   <div style="flex:1; min-width:0;">
@@ -178,10 +178,10 @@
         <div class="panel" style="margin-bottom:14px;">
           <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin-bottom:10px;">Quick Actions</div>
           <div style="display:flex; flex-direction:column; gap:7px;">
-            <a href="/admin/live" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">🟢&nbsp; Live View</a>
-            <a href="/admin/shifts" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">📋&nbsp; Build Checklists</a>
-            <a href="/admin/employees" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">👥&nbsp; Manage Staff</a>
-            <a href="/admin/reports" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">📊&nbsp; View Reports</a>
+            <a href="<%= adminUrl('/live') %>" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">🟢&nbsp; Live View</a>
+            <a href="<%= adminUrl('/build') %>" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">📋&nbsp; Build Checklists</a>
+            <a href="<%= adminUrl('/employees') %>" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">👥&nbsp; Manage Staff</a>
+            <a href="<%= adminUrl('/reports') %>" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">📊&nbsp; View Reports</a>
           </div>
         </div>
 
@@ -308,7 +308,7 @@
     async function poll() {
       setBadgeUpdating();
       try {
-        var res = await fetch('/admin/live/data');
+        var res = await fetch('<%= adminUrl('/live/data') %>');
         if (!res.ok) { setBadgeLive(); return; }
         var data = await res.json();
         updateShiftPanels(data.shiftData);

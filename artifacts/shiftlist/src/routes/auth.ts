@@ -1,18 +1,19 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
+import { staffUrl } from "../lib/urls.js";
 
 const router = Router();
 
-router.get("/", (_req, res) => {
-  res.redirect("/login");
-});
+// Mounted at /staff — this is the staff login flow. Admin auth is no longer
+// handled here: /admin/shifts trusts the Viking ordering app's session
+// cookie instead. See src/middleware/vikingAuth.ts.
 
-router.get("/login", (req, res) => {
-  if (req.session.employeeId) return void res.redirect("/staff/tasks");
+router.get("/", (req, res) => {
+  if (req.session.employeeId) return void res.redirect(staffUrl("/tasks"));
   res.render("login", { error: null });
 });
 
-router.post("/login", async (req, res) => {
+router.post("/", async (req, res) => {
   const { code } = req.body as { code: string };
   const result = await pool.query(
     "SELECT * FROM employees WHERE code = $1",
@@ -23,11 +24,11 @@ router.post("/login", async (req, res) => {
     return void res.render("login", { error: "Invalid code. Please try again." });
   }
   req.session.pendingEmployee = employee;
-  res.redirect("/confirm-name");
+  res.redirect(staffUrl("/confirm-name"));
 });
 
 router.get("/confirm-name", (req, res) => {
-  if (!req.session.pendingEmployee) return void res.redirect("/login");
+  if (!req.session.pendingEmployee) return void res.redirect(staffUrl());
   res.render("confirmName", { employee: req.session.pendingEmployee });
 });
 
@@ -39,14 +40,14 @@ router.post("/confirm-name", (req, res) => {
     req.session.employeeName = emp.name;
     req.session.employeeCode = emp.code;
     delete req.session.pendingEmployee;
-    return void res.redirect("/select-shift");
+    return void res.redirect(staffUrl("/select-shift"));
   }
   delete req.session.pendingEmployee;
-  res.redirect("/login");
+  res.redirect(staffUrl());
 });
 
 router.get("/select-shift", async (req, res) => {
-  if (!req.session.employeeId) return void res.redirect("/login");
+  if (!req.session.employeeId) return void res.redirect(staffUrl());
   const shifts = (await pool.query(
     `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
   )).rows;
@@ -54,9 +55,9 @@ router.get("/select-shift", async (req, res) => {
 });
 
 router.post("/select-shift", async (req, res) => {
-  if (!req.session.employeeId) return void res.redirect("/login");
+  if (!req.session.employeeId) return void res.redirect(staffUrl());
   const { shiftId } = req.body as { shiftId: string };
-  if (!shiftId) return void res.redirect("/select-shift");
+  if (!shiftId) return void res.redirect(staffUrl("/select-shift"));
   const shiftIdNum = Number(shiftId);
   req.session.selectedShiftId = shiftIdNum;
 
@@ -73,30 +74,11 @@ router.post("/select-shift", async (req, res) => {
     [req.session.employeeId, req.session.employeeName ?? "", shiftIdNum, shiftName, today]
   );
 
-  res.redirect("/staff/tasks");
+  res.redirect(staffUrl("/tasks"));
 });
 
 router.get("/logout", (req, res) => {
-  req.session.destroy(() => res.redirect("/login"));
-});
-
-router.get("/admin/login", (req, res) => {
-  if (req.session.isAdmin) return void res.redirect("/admin/dashboard");
-  res.render("admin/login", { error: null });
-});
-
-router.post("/admin/login", (req, res) => {
-  const { adminCode } = req.body as { adminCode: string };
-  const expected = process.env["ADMIN_CODE"] ?? "1234";
-  if (adminCode === expected) {
-    req.session.isAdmin = true;
-    return void res.redirect("/admin/dashboard");
-  }
-  res.render("admin/login", { error: "Invalid admin code." });
-});
-
-router.get("/admin/logout", (req, res) => {
-  req.session.destroy(() => res.redirect("/login"));
+  req.session.destroy(() => res.redirect(staffUrl()));
 });
 
 export default router;
