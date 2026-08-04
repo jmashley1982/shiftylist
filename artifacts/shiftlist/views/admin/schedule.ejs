@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Schedule</title>
   <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
+  <script src="<%= staffUrl('/pdf-schedule.js') %>" defer></script>
 </head>
 <body>
   <%- include('../partials/admin-nav', { active: 'schedule' }) %>
@@ -89,12 +90,12 @@
         <input type="hidden" name="week" value="<%= weekStart %>">
         <textarea name="csvText" id="csvTextField" style="display:none;"></textarea>
         <div class="form-group">
-          <label>Homebase CSV export</label>
-          <input type="file" accept=".csv,text/csv" id="csvFileInput" required>
+          <label>Homebase schedule export (PDF or CSV)</label>
+          <input type="file" accept=".pdf,.csv,text/csv,application/pdf" id="csvFileInput" required>
         </div>
-        <p style="font-size:0.8rem; color:var(--muted); margin:0 0 10px;">
-          Export the week's schedule from Homebase, then upload the CSV here. If it downloads as an Excel file,
-          open it and use File → Save as CSV first. Uploading replaces any previously imported shifts for the dates in the file.
+        <p id="uploadStatus" style="font-size:0.8rem; color:var(--muted); margin:0 0 10px;">
+          Export the week's schedule from Homebase (Print/Export on the Schedule tab) and upload it here — PDF works directly.
+          Uploading replaces any previously imported shifts for the dates in the file.
         </p>
         <button type="submit" class="btn btn-primary btn-full" id="csvPreviewBtn">Preview import</button>
       </form>
@@ -199,28 +200,67 @@
         });
       }
 
-      // ── Upload: read the CSV client-side, no server-side multipart needed ──
+      // ── Upload: read the file client-side, no server-side multipart needed.
+      // CSV is read as plain text; PDF is parsed into the same CSV shape by
+      // pdf-schedule.js (position-aware, since Homebase's PDF is a grid with
+      // blank cells simply missing from the text — see that file for why).
       var form = document.getElementById('scheduleUploadForm');
       var fileInput = document.getElementById('csvFileInput');
       var textField = document.getElementById('csvTextField');
       var btn = document.getElementById('csvPreviewBtn');
+      var statusEl = document.getElementById('uploadStatus');
       if (!form || !fileInput || !textField) return;
+
+      function setBusy(label) {
+        if (btn) { btn.disabled = true; btn.textContent = label; }
+      }
+      function setIdle() {
+        if (btn) { btn.disabled = false; btn.textContent = 'Preview import'; }
+      }
+
+      function readAsText(file) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () { resolve(String(reader.result || '')); };
+          reader.onerror = function () { reject(new Error('Could not read that file')); };
+          reader.readAsText(file);
+        });
+      }
 
       form.addEventListener('submit', function (e) {
         var file = fileInput.files[0];
         if (!file) return; // native "required" handles the empty case
         e.preventDefault();
-        if (btn) { btn.disabled = true; btn.textContent = 'Reading file…'; }
-        var reader = new FileReader();
-        reader.onload = function () {
-          textField.value = String(reader.result || '');
-          form.submit();
-        };
-        reader.onerror = function () {
-          if (btn) { btn.disabled = false; btn.textContent = 'Preview import'; }
-          alert('Could not read that file — try again.');
-        };
-        reader.readAsText(file);
+
+        var isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+
+        var work = isPdf
+          ? (function () {
+              setBusy('Reading PDF…');
+              return window.ShiftListPdfSchedule.parsePdfToCsv(file).then(function (result) {
+                if (result.rowCount === 0) {
+                  throw new Error(
+                    "Couldn't find any shifts in that PDF — its layout might not match what this expects. " +
+                    'Try the CSV export instead, or send this PDF over so the parser can be fixed.'
+                  );
+                }
+                return result.csvText;
+              });
+            })()
+          : (function () {
+              setBusy('Reading file…');
+              return readAsText(file);
+            })();
+
+        work
+          .then(function (csvText) {
+            textField.value = csvText;
+            form.submit();
+          })
+          .catch(function (err) {
+            setIdle();
+            alert(err && err.message ? err.message : 'Could not read that file — try again.');
+          });
       });
     })();
   </script>
