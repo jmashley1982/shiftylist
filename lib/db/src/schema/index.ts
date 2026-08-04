@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, unique, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, unique, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 export const employees = pgTable("employees", {
@@ -115,3 +115,47 @@ export const activeSessions = pgTable("active_sessions", {
 ]);
 
 export type ActiveSession = typeof activeSessions.$inferSelect;
+
+// Login sessions (express-session store). Workers isolates are short-lived, so
+// sessions cannot live in process memory — see artifacts/shiftlist/src/lib/sessionStore.ts
+export const sessions = pgTable("sessions", {
+  sid: text("sid").primaryKey(),
+  sess: jsonb("sess").notNull(),
+  expire: timestamp("expire", { withTimezone: true, precision: 6 }).notNull(),
+}, (table) => [
+  index("idx_sessions_expire").on(table.expire),
+]);
+
+export type SessionRow = typeof sessions.$inferSelect;
+
+// Schedule imported from a Homebase CSV export — who is supposed to work
+// which shift, as opposed to task_completions/submissions which track what
+// actually happened. See artifacts/shiftlist/src/lib/scheduleTables.ts.
+export const scheduledShifts = pgTable("scheduled_shifts", {
+  id: serial("id").primaryKey(),
+  date: text("date").notNull(),
+  employeeId: integer("employee_id").notNull(),
+  employeeName: text("employee_name").notNull(),
+  shiftId: integer("shift_id").notNull().references(() => shifts.id, { onDelete: "cascade" }),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time"),
+  source: text("source").notNull().default("homebase_csv"),
+  importedAt: timestamp("imported_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique().on(table.date, table.employeeId, table.startTime),
+]);
+
+export type ScheduledShift = typeof scheduledShifts.$inferSelect;
+export type InsertScheduledShift = typeof scheduledShifts.$inferInsert;
+
+// Maps a shift's start time range to one of this store's shift types, used
+// to classify imported Homebase rows into Open/Mid/Close (etc).
+export const shiftTimeRules = pgTable("shift_time_rules", {
+  id: serial("id").primaryKey(),
+  shiftId: integer("shift_id").notNull().unique().references(() => shifts.id, { onDelete: "cascade" }),
+  startFrom: text("start_from").notNull(),
+  startUntil: text("start_until").notNull(),
+});
+
+export type ShiftTimeRule = typeof shiftTimeRules.$inferSelect;
+export type InsertShiftTimeRule = typeof shiftTimeRules.$inferInsert;

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Live Status</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <%- include('../partials/admin-nav', { active: 'live' }) %>
@@ -50,7 +50,7 @@
 
     <% if (shiftData.length === 0) { %>
       <div class="panel">
-        <p style="color:var(--muted); font-size:0.9rem;">No shifts set up yet. <a href="/admin/shifts">Create one</a>.</p>
+        <p style="color:var(--muted); font-size:0.9rem;">No shifts set up yet. <a href="<%= adminUrl('/build') %>">Create one</a>.</p>
       </div>
     <% } %>
 
@@ -226,7 +226,7 @@
     async function pollLive() {
       setBadgeUpdating();
       try {
-        var res = await fetch('/admin/live/data');
+        var res = await fetch('<%= adminUrl('/live/data') %>');
         if (!res.ok) { setBadgeLive(); return; }
         var data = await res.json();
         data.shiftData.forEach(function(sd) {

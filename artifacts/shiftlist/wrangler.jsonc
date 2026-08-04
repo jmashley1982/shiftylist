@@ -1,0 +1,91 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "shiftylist",
+  "main": "./src/worker.ts",
+
+  // >= 2025-08-15 for httpServerHandler, >= 2025-09-01 for the node:fs stubs,
+  // >= 2025-04-01 for process.env being populated from vars and secrets.
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "workers_dev": true,
+
+  // Served at the edge before the Worker runs, so /staff/style.css,
+  // /staff/vvas-logo.png etc. never reach Express. `not_found_handling` is
+  // deliberately unset (defaults to "none") so every other path under our
+  // routes falls through to the Worker — "single-page-application" would
+  // swallow /staff and /admin/shifts/*.
+  "assets": {
+    "directory": "./public"
+  },
+
+  // Points at the Neon database. Query caching must stay OFF:
+  //   npx wrangler hyperdrive update <id> --caching-disabled
+  // Hyperdrive does not invalidate cached reads on write, and this app is
+  // read-after-write throughout — a standing task added by an admin is meant
+  // to be live for staff immediately, with no publish step. Connection
+  // pooling, the reason we use Hyperdrive, is unaffected by disabling it.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "a386fd3968494978bebe2debe8544f11",
+      // Used only by `wrangler dev` — point it at a local or dev Postgres.
+      "localConnectionString": "postgres://postgres:postgres@localhost:5432/shiftlist"
+    }
+  ],
+
+  "vars": {
+    "NODE_ENV": "production",
+    "LOG_LEVEL": "info",
+    "STORE_TIMEZONE": "America/Chicago"
+  },
+
+  // SESSION_SECRET is a secret, not a var:
+  //   npx wrangler secret put SESSION_SECRET
+  // It must be the EXACT same value as jmashley1982/viking-product-ordering's
+  // SESSION_SECRET — /admin/shifts verifies that app's session cookie instead
+  // of having its own login. A mismatch bounces every manager back to /admin.
+  // There is no ADMIN_CODE anymore; the old ShiftList admin login is gone.
+
+  "observability": {
+    "enabled": true
+  },
+
+  "limits": {
+    // Workers Paid only. Express routing plus an EJS render of the larger
+    // admin pages will not fit in the Free plan's 10 ms CPU ceiling.
+    "cpu_ms": 30000
+  },
+
+  "placement": {
+    // Run the isolate near Hyperdrive's origin connection — the admin pages
+    // issue several sequential queries per request.
+    "mode": "smart"
+  },
+
+  // Hourly: auto-submits stale shift sessions and prunes expired logins.
+  "triggers": {
+    "crons": ["5 * * * *"]
+  },
+
+  // shiftylist.app is retired — ShiftList now lives on the business's own
+  // domain, as two path prefixes on a zone the storefront Worker
+  // (jmashley1982/viking) and the ordering/admin Worker
+  // (jmashley1982/viking-product-ordering) already share:
+  //
+  //   vikingvaporandsmoke.com/staff*         → staff checklist app
+  //   vikingvaporandsmoke.com/admin/shifts*  → shift management, folded
+  //                                             into the existing admin
+  //
+  // Cloudflare matches the most specific route, so /admin/shifts* here wins
+  // over the ordering app's /admin* — the same mechanism that app already
+  // relies on for /admin vs. /ordering. Both prefixes are otherwise unused
+  // by either of those repos.
+  //
+  // Deploying this does not require touching either other repo: it only
+  // claims two path prefixes on a zone this Worker doesn't otherwise serve.
+  "routes": [
+    { "pattern": "vikingvaporandsmoke.com/staff*", "zone_name": "vikingvaporandsmoke.com" },
+    { "pattern": "vikingvaporandsmoke.com/admin/shifts*", "zone_name": "vikingvaporandsmoke.com" }
+  ]
+}

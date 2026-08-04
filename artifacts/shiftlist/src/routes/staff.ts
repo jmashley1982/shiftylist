@@ -3,17 +3,18 @@ import { pool } from "../db/index.js";
 import { ensureStaffAuth } from "../middleware/auth.js";
 import { getBusinessDayStr } from "../utils/dateHelpers.js";
 import { logger } from "../lib/logger.js";
-import { sweepStaleSessions } from "../utils/autoSubmit.js";
+import { staffUrl } from "../lib/urls.js";
+import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
 
 const router = Router();
 
 router.get("/tasks", ensureStaffAuth, async (req, res) => {
-  void sweepStaleSessions();
+  sweepStaleSessionsOnRequest();
   const today = getBusinessDayStr();
   const shiftId = req.session.selectedShiftId;
 
   if (!shiftId) {
-    return void res.redirect("/select-shift");
+    return void res.redirect(staffUrl("/select-shift"));
   }
 
   const [standingRes, extraRes, compRes, shiftRes] = await Promise.all([

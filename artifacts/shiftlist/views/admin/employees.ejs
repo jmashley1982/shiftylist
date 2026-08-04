@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Staff</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <%- include('../partials/admin-nav', { active: 'employees' }) %>
@@ -20,7 +20,7 @@
 
     <div class="panel">
       <div class="panel-header"><h2>Add Employee</h2></div>
-      <form method="POST" action="/admin/employees/add" class="form-stack">
+      <form method="POST" action="<%= adminUrl('/employees/add') %>" class="form-stack">
         <div class="form-group">
           <label>Full Name</label>
           <input type="text" name="name" placeholder="Jane Smith" required autocomplete="off">
@@ -43,7 +43,7 @@
                 <code style="background:var(--bg); padding:2px 10px; border-radius:6px; font-size:0.85rem; letter-spacing:3px; border:1px solid var(--border);"><%= emp.code %></code>
               </div>
             </div>
-            <form method="POST" action="/admin/employees/delete/<%= emp.id %>" onsubmit="return confirm('Delete <%= emp.name %>?')">
+            <form method="POST" action="<%= adminUrl('/employees/delete/' + emp.id) %>" onsubmit="return confirm('Delete <%= emp.name %>?')">
               <button type="submit" class="btn btn-danger btn-sm">Delete</button>
             </form>
           </div>

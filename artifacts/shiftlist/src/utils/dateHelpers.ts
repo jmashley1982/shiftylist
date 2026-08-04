@@ -79,6 +79,20 @@ export function formatDateFull(dateStr: string): string {
  * Format a UTC timestamp as a human-readable time in the store's local timezone.
  * Use this anywhere a timestamp from the database needs to be shown to staff/admin.
  */
+/** Add (or subtract, with a negative n) whole days to a YYYY-MM-DD string. */
+export function addDaysToDateStr(dateStr: string, n: number): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const d = new Date(year, month - 1, day + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** The Sunday on or before dateStr, as YYYY-MM-DD — the start of that week. */
+export function getWeekStartStr(dateStr: string): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const d = new Date(year, month - 1, day);
+  return addDaysToDateStr(dateStr, -d.getDay());
+}
+
 export function formatLocalTime(date: Date | string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: tz(),

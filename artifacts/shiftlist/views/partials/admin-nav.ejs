@@ -1,33 +1,37 @@
 <nav class="navbar">
-  <a href="/admin/dashboard" class="brand">
-    <img src="/vvas-logo.png" alt="VVAS">
-    <img src="/shiftylist-logo.png" alt="ShiftyList" class="brand-platform-logo">
+  <a href="<%= adminUrl() %>" class="brand">
+    <img src="<%= staffUrl('/vvas-logo.png') %>" alt="VVAS">
+    <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList" class="brand-platform-logo">
   </a>
-  <a href="/admin/logout" class="btn btn-ghost btn-sm text-danger" style="color:var(--danger);min-height:36px;padding:7px 12px;">Log out</a>
+  <a href="/admin" class="btn btn-ghost btn-sm" style="min-height:36px;padding:7px 12px;">← Dashboard</a>
 </nav>
 
 <nav class="admin-tab-nav">
-  <a href="/admin/dashboard" class="admin-tab-link <%= active === 'dashboard' ? 'active' : '' %>">
+  <a href="<%= adminUrl() %>" class="admin-tab-link <%= active === 'dashboard' ? 'active' : '' %>">
     <span class="tab-icon">🏠</span>
     <span>Home</span>
   </a>
-  <a href="/admin/employees" class="admin-tab-link <%= active === 'employees' ? 'active' : '' %>">
+  <a href="<%= adminUrl('/employees') %>" class="admin-tab-link <%= active === 'employees' ? 'active' : '' %>">
     <span class="tab-icon">👥</span>
     <span>Staff</span>
   </a>
-  <a href="/admin/shifts" class="admin-tab-link <%= active === 'shifts' ? 'active' : '' %>">
+  <a href="<%= adminUrl('/build') %>" class="admin-tab-link <%= active === 'shifts' ? 'active' : '' %>">
     <span class="tab-icon">📋</span>
     <span>Shifts</span>
   </a>
-  <a href="/admin/live" class="admin-tab-link <%= active === 'live' ? 'active' : '' %>">
+  <a href="<%= adminUrl('/live') %>" class="admin-tab-link <%= active === 'live' ? 'active' : '' %>">
     <span class="tab-icon">🟢</span>
     <span>Live</span>
   </a>
-  <a href="/admin/reports" class="admin-tab-link <%= active === 'reports' ? 'active' : '' %>">
+  <a href="<%= adminUrl('/schedule') %>" class="admin-tab-link <%= active === 'schedule' ? 'active' : '' %>">
+    <span class="tab-icon">🗓️</span>
+    <span>Schedule</span>
+  </a>
+  <a href="<%= adminUrl('/reports') %>" class="admin-tab-link <%= active === 'reports' ? 'active' : '' %>">
     <span class="tab-icon">📊</span>
     <span>Reports</span>
   </a>
-  <a href="/admin/notice" class="admin-tab-link <%= active === 'notice' ? 'active' : '' %>">
+  <a href="<%= adminUrl('/notice') %>" class="admin-tab-link <%= active === 'notice' ? 'active' : '' %>">
     <span class="tab-icon">📢</span>
     <span>Notice</span>
   </a>

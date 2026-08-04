@@ -4,17 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>My Tasks</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
 </head>
 <body>
   <nav class="navbar">
-    <a href="/admin/dashboard" class="brand">
-      <img src="/vvas-logo.png" alt="VVAS">
-      <img src="/shiftylist-logo.png" alt="ShiftyList" class="brand-platform-logo">
+    <a href="<%= staffUrl('/tasks') %>" class="brand">
+      <img src="<%= staffUrl('/vvas-logo.png') %>" alt="VVAS">
+      <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList" class="brand-platform-logo">
     </a>
     <div class="navbar-right">
       <span class="navbar-user"><%= employeeName %></span>
-      <a href="/logout" class="btn btn-ghost btn-sm" style="min-height:36px;padding:7px 12px;">Out</a>
+      <a href="<%= staffUrl('/logout') %>" class="btn btn-ghost btn-sm" style="min-height:36px;padding:7px 12px;">Out</a>
     </div>
   </nav>
 
@@ -70,7 +70,7 @@
       </p>
       <div class="powered-by" style="margin-top:16px;">
         <span>Powered by</span>
-        <img src="/shiftylist-logo.png" alt="ShiftyList">
+        <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList">
       </div>
     </div>
   </div>
@@ -299,19 +299,19 @@
       try {
         var bodyStr = 'taskName=' + encodeURIComponent(taskData[idx].text);
         if (completing && lateReason) bodyStr += '&lateReason=' + encodeURIComponent(lateReason);
-        var resp = await fetch(completing ? '/staff/complete' : '/staff/uncomplete', {
+        var resp = await fetch(completing ? '<%= staffUrl("/complete") %>' : '<%= staffUrl("/uncomplete") %>', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: bodyStr,
         });
-        // Detect session expiry: fetch follows the /login redirect and lands on
+        // Detect session expiry: fetch follows the login redirect and lands on
         // 200 HTML. Check content-type first — if it's not JSON the session has
         // expired regardless of HTTP status code.
         var ct = resp.headers.get('content-type') || '';
         if (!ct.includes('application/json')) {
           // Session expired — keep visual state (DB is safe), redirect to login
           showToast('Session expired — logging you back in…');
-          setTimeout(function() { window.location.href = '/login'; }, 1800);
+          setTimeout(function() { window.location.href = '<%= staffUrl() %>'; }, 1800);
           return; // finally still runs (toggling = false), page navigating away
         }
         if (!resp.ok) throw new Error('server error');
@@ -372,17 +372,17 @@
       var btn = document.getElementById('submitBtn');
       var notes = document.getElementById('notes').value;
       try {
-        var res = await fetch('/staff/submit', {
+        var res = await fetch('<%= staffUrl("/submit") %>', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'tasks=' + encodeURIComponent(JSON.stringify(taskData)) + '&notes=' + encodeURIComponent(notes)
         });
-        // Detect session expiry: ensureStaffAuth redirects to /login, so fetch
+        // Detect session expiry: ensureStaffAuth redirects to the login page, so fetch
         // follows and res.redirected is true. A direct render (success) is never
         // redirected.
         if (res.redirected) {
           showToast('Session expired \u2014 please log back in and resubmit');
-          setTimeout(function() { window.location.href = '/login'; }, 2500);
+          setTimeout(function() { window.location.href = '<%= staffUrl() %>'; }, 2500);
           btn.disabled = false;
           btn.textContent = 'Submit Shift Report';
           return;
