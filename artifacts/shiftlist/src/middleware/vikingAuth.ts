@@ -65,9 +65,46 @@ function timingSafeEqual(a: string, b: string): boolean {
  * values reveal anything an attacker couldn't already infer from being
  * redirected.
  */
-export type VikingAuthResult = "ok" | "no_secret" | "no_cookie" | "malformed" | "bad_sig" | "expired";
+export type VikingAuthResult =
+  | "ok"
+  | "no_secret"
+  | "no_cookie"
+  | "malformed"
+  | "bad_sig"
+  | "expired"
+  | "rejected"
+  | "verify_error";
+
+/**
+ * On Workers, the cookie is verified by the ordering app itself over a
+ * service binding (see worker.ts) — the app that MINTED the cookie decides
+ * whether it's valid, so there is no second copy of SESSION_SECRET here to
+ * drift out of sync. Keeping two hand-synced secrets aligned across two
+ * Workers, a GitHub repo secret, and a deploy workflow that re-syncs one of
+ * them proved impossible to operate; this removes the requirement entirely.
+ *
+ * The local HMAC path below survives only as the Node dev fallback, where
+ * no service binding exists.
+ */
+type RemoteVerifier = (cookieHeader: string) => Promise<boolean>;
+
+let remoteVerifier: RemoteVerifier | null = null;
+
+export function setVikingSessionVerifier(verifier: RemoteVerifier): void {
+  remoteVerifier = verifier;
+}
 
 export async function checkVikingSession(req: Request): Promise<VikingAuthResult> {
+  if (remoteVerifier) {
+    if (!readCookie(req, COOKIE_NAME)) return "no_cookie";
+    try {
+      return (await remoteVerifier(req.headers.cookie ?? "")) ? "ok" : "rejected";
+    } catch {
+      // Fail closed: if the ordering app can't be asked, nobody gets in.
+      return "verify_error";
+    }
+  }
+
   const secret = process.env["SESSION_SECRET"];
   // Fail closed: an unset or too-short secret must never be treated as "let
   // everyone in" — same rule the ordering app applies to its own copy.

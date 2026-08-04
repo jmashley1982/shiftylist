@@ -1,6 +1,7 @@
 import { httpServerHandler } from "cloudflare:node";
 import { env } from "cloudflare:workers";
 import app from "./app.js";
+import { setVikingSessionVerifier } from "./middleware/vikingAuth.js";
 import { createPool, runWithPool, setConnectionStringResolver } from "./db/index.js";
 import { sweepStaleSessions } from "./utils/autoSubmit.js";
 import { pruneSessions } from "./lib/sessionStore.js";
@@ -33,6 +34,13 @@ const PORT = 8787;
 
 interface WorkerEnv {
   HYPERDRIVE?: { connectionString: string };
+  ORDERING?: {
+    fetch(url: string, init?: { headers?: Record<string, string> }): Promise<{
+      ok: boolean;
+      status: number;
+      json(): Promise<unknown>;
+    }>;
+  };
 }
 
 const bindings = env as unknown as WorkerEnv;
@@ -43,6 +51,26 @@ setConnectionStringResolver(() => {
     throw new Error("HYPERDRIVE binding is missing — check wrangler.jsonc.");
   }
   return connectionString;
+});
+
+// Admin auth asks the ordering app itself whether the viking_session cookie
+// is valid, over a service binding — the app that minted the cookie is the
+// only authority on it. See vikingAuth.ts for why the shared-secret scheme
+// was abandoned. The URL host is arbitrary; a service binding always reaches
+// the bound Worker directly.
+setVikingSessionVerifier(async (cookieHeader) => {
+  const ordering = bindings.ORDERING;
+  if (!ordering) {
+    throw new Error("ORDERING service binding is missing — check wrangler.jsonc.");
+  }
+  const res = await ordering.fetch("https://viking-product-ordering/api/me", {
+    headers: { cookie: cookieHeader },
+  });
+  if (!res.ok) {
+    throw new Error(`ordering /api/me responded ${res.status}`);
+  }
+  const data = (await res.json()) as { authenticated?: boolean };
+  return data.authenticated === true;
 });
 
 // Required, not just a warm-up: EJS compiles templates with `new Function`,

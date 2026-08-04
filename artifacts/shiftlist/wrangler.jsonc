@@ -42,10 +42,22 @@
 
   // SESSION_SECRET is a secret, not a var:
   //   npx wrangler secret put SESSION_SECRET
-  // It must be the EXACT same value as jmashley1982/viking-product-ordering's
-  // SESSION_SECRET — /admin/shifts verifies that app's session cookie instead
-  // of having its own login. A mismatch bounces every manager back to /admin.
+  // It signs ShiftList's OWN staff sessions (express-session) and nothing
+  // else. It does NOT need to match any other app's secret: /admin/shifts
+  // manager auth is verified by the ordering app itself over the ORDERING
+  // service binding below, so there is no cross-app secret to keep in sync.
   // There is no ADMIN_CODE anymore; the old ShiftList admin login is gone.
+
+  // Manager auth for /admin/shifts: the viking_session cookie is minted by
+  // viking-product-ordering, so that Worker is asked directly whether a
+  // cookie is valid (GET /api/me over this binding). Nothing to configure
+  // beyond the binding itself — no shared secret, no extra route.
+  "services": [
+    {
+      "binding": "ORDERING",
+      "service": "viking-product-ordering"
+    }
+  ],
 
   "observability": {
     "enabled": true
