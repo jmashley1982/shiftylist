@@ -47,3 +47,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Claude Code local settings — per-machine permission grants, not shared config
+.claude/settings.local.json
