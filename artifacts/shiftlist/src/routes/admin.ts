@@ -13,7 +13,13 @@ import {
 } from "../utils/dateHelpers.js";
 import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
 import { ensureScheduleTables, DEFAULT_TIME_RULES } from "../lib/scheduleTables.js";
-import { parseHomebaseCsv, matchShiftType, describeRuleProblems, type ShiftTimeRule } from "../lib/homebaseCsv.js";
+import {
+  parseHomebaseCsv,
+  matchShiftType,
+  describeRuleProblems,
+  describeRuleWindow,
+  type ShiftTimeRule,
+} from "../lib/homebaseCsv.js";
 import { matchEmployeeName } from "../lib/employeeMatch.js";
 
 // Mounted at /admin/shifts. There is no login here anymore — ensureAdminAuth
@@ -713,6 +719,10 @@ router.get("/schedule", async (req, res) => {
     imported: req.query.imported ? Number(req.query.imported) : null,
     importError: req.query.importError === "1",
     rulesSaved: req.query.rulesSaved === "1",
+    refiled: req.query.refiled ? Number(req.query.refiled) : 0,
+    orphaned: req.query.orphaned ? Number(req.query.orphaned) : 0,
+    cleared: req.query.cleared !== undefined ? Number(req.query.cleared) : null,
+    describeRuleWindow,
     formatDateDisplay,
   });
 });
@@ -834,6 +844,10 @@ router.post("/schedule/preview", async (req, res) => {
     imported: null,
     importError: false,
     rulesSaved: false,
+    refiled: 0,
+    orphaned: 0,
+    cleared: null,
+    describeRuleWindow,
     formatDateDisplay,
   });
 });
@@ -914,7 +928,52 @@ router.post("/schedule/rules", async (req, res) => {
     );
   }
 
-  res.redirect(`${adminUrl("/schedule")}?week=${weekStart}&rulesSaved=1`);
+  // Re-file everything already imported. Each scheduled_shifts row stores the
+  // shift it was sorted into at import time, so without this, correcting a
+  // window changes nothing on screen and the only way to fix a bad import is
+  // to notice you must upload the file again. Rows that now match no window
+  // are left alone and counted — silently deleting someone's schedule as a
+  // side effect of saving a settings form would be far worse than showing it.
+  const { rows: refiled } = await pool.query(
+    `SELECT r.shift_id as "shiftId", s.name as "shiftName", r.start_from as "startFrom", r.start_until as "startUntil"
+     FROM shift_time_rules r JOIN shifts s ON s.id = r.shift_id
+     ORDER BY r.start_from`
+  );
+  const freshRules = refiled as ShiftTimeRule[];
+  const { rows: existing } = await pool.query(
+    `SELECT id, shift_id as "shiftId", start_time as "startTime" FROM scheduled_shifts`
+  );
+
+  let moved = 0;
+  let orphaned = 0;
+  await withTransaction(async (client) => {
+    for (const row of existing as { id: number; shiftId: number; startTime: string }[]) {
+      const rule = matchShiftType(row.startTime, freshRules);
+      if (!rule) {
+        orphaned++;
+        continue;
+      }
+      if (rule.shiftId === row.shiftId) continue;
+      await client.query("UPDATE scheduled_shifts SET shift_id = $1 WHERE id = $2", [rule.shiftId, row.id]);
+      moved++;
+    }
+  });
+
+  res.redirect(
+    `${adminUrl("/schedule")}?week=${weekStart}&rulesSaved=1&refiled=${moved}&orphaned=${orphaned}`
+  );
+});
+
+// Removes an imported week. Scoped to the dates on screen — the page is
+// week-navigated, and wiping weeks the admin can't see would be its own trap.
+router.post("/schedule/clear", async (req, res) => {
+  await ensureScheduleTables();
+  const weekStart = resolveWeekParam(req.body.week);
+  const weekDates = Array.from({ length: 7 }, (_, i) => addDaysToDateStr(weekStart, i));
+
+  const result = await pool.query("DELETE FROM scheduled_shifts WHERE date = ANY($1::text[])", [weekDates]);
+
+  res.redirect(`${adminUrl("/schedule")}?week=${weekStart}&cleared=${result.rowCount ?? 0}`);
 });
 
 router.get("/schedule/report", async (_req, res) => {

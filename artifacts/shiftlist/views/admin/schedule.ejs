@@ -22,7 +22,18 @@
       <div class="alert alert-error" style="margin-bottom:16px;">Nothing to import — check the file and try again.</div>
     <% } %>
     <% if (rulesSaved) { %>
-      <div class="alert alert-success" style="margin-bottom:16px;">Time windows saved.</div>
+      <div class="alert alert-success" style="margin-bottom:16px;">
+        Time windows saved.<% if (refiled > 0) { %>
+          Re-sorted <%= refiled %> already-imported shift<%= refiled === 1 ? '' : 's' %> to match — no need to upload again.<% } %>
+        <% if (orphaned > 0) { %>
+          <div style="margin-top:6px;"><%= orphaned %> imported shift<%= orphaned === 1 ? '' : 's' %> start at a time no window covers, so <%= orphaned === 1 ? 'it was' : 'they were' %> left where <%= orphaned === 1 ? 'it is' : 'they are' %>.</div>
+        <% } %>
+      </div>
+    <% } %>
+    <% if (cleared !== null) { %>
+      <div class="alert alert-success" style="margin-bottom:16px;">
+        Removed <%= cleared %> imported shift<%= cleared === 1 ? '' : 's' %> from this week.
+      </div>
     <% } %>
 
     <!-- ─────────────────── PREVIEW (after an upload) ─────────────────── -->
@@ -104,10 +115,12 @@
     <!-- ─────────────────── TIME WINDOWS ─────────────────── -->
     <% if (shifts.length > 0) { %>
       <div class="panel" style="margin-bottom:16px;">
-        <div class="panel-header"><h2 style="font-size:1rem;">Shift time windows</h2></div>
+        <div class="panel-header"><h2 style="font-size:1rem;">Which shift does an imported start time count as?</h2></div>
         <p style="font-size:0.82rem; color:var(--muted); margin:0 0 12px;">
-          Used to sort each imported start time into one of your shifts. Leave a
-          shift blank if it never comes from Homebase — staff still pick it by hand.
+          These are sorting boundaries, not your shifts' real hours — an opener
+          who works 09:30–17:30 still belongs to "starts before 11:00". Leave a
+          shift blank if Homebase never schedules it; staff still pick it by hand.
+          Saving re-sorts shifts you've already imported.
         </p>
         <form method="POST" action="<%= adminUrl('/schedule/rules') %>">
           <input type="hidden" name="week" value="<%= weekStart %>">
@@ -121,9 +134,7 @@
               <label style="font-size:0.8rem; color:var(--muted);">until</label>
               <input type="time" name="start_until_<%= s.id %>" value="<%= rule ? rule.startUntil : '' %>"
                      style="width:auto; min-height:34px; font-size:0.85rem; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
-              <span style="font-size:0.78rem; color:var(--muted);">
-                <% if (!rule) { %>not imported<% } else { %>a <%= rule.startFrom %> start lands here<% } %>
-              </span>
+              <span style="font-size:0.78rem; color:var(--muted);"><%= describeRuleWindow(rule) %></span>
             </div>
           <% }); %>
 
@@ -150,6 +161,18 @@
       <div style="font-weight:700; font-size:0.92rem;"><%= formatDateDisplay(weekDates[0]) %> – <%= formatDateDisplay(weekDates[6]) %></div>
       <a href="<%= adminUrl('/schedule') %>?week=<%= nextWeek %>" class="btn btn-sm btn-ghost">Next week →</a>
     </div>
+
+    <% var weekHasImport = weekDates.some(function(d) {
+         var day = grid.get(d);
+         return day && [...day.values()].some(function(list) { return list.length > 0; });
+       }); %>
+    <% if (weekHasImport) { %>
+      <form method="POST" action="<%= adminUrl('/schedule/clear') %>" style="margin-bottom:12px;"
+            onsubmit="return confirm('Remove every imported shift for <%= formatDateDisplay(weekDates[0]) %> – <%= formatDateDisplay(weekDates[6]) %>? Other weeks are left alone.');">
+        <input type="hidden" name="week" value="<%= weekStart %>">
+        <button type="submit" class="btn btn-ghost btn-sm">Clear this week's import</button>
+      </form>
+    <% } %>
 
     <% if (shifts.length === 0) { %>
       <div class="alert alert-info" style="margin-bottom:16px;">

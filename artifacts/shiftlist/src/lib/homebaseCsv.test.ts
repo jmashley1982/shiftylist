@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseHomebaseCsv, matchShiftType, describeRuleProblems } from "./homebaseCsv.js";
+import { parseHomebaseCsv, matchShiftType, describeRuleProblems, describeRuleWindow } from "./homebaseCsv.js";
 
 test("parses a straightforward export", () => {
   const csv = [
@@ -207,4 +207,30 @@ test("a window wrapping past midnight isn't reported as a problem", () => {
     { shiftId: 2, shiftName: "Close", startFrom: "14:00", startUntil: "02:00" },
   ];
   assert.deepEqual(describeRuleProblems(wrapping), []);
+});
+
+test("describeRuleWindow reads as a boundary, not as working hours", () => {
+  assert.equal(
+    describeRuleWindow({ shiftId: 1, shiftName: "Open", startFrom: "00:00", startUntil: "11:00" }),
+    "catches starts before 11:00"
+  );
+  assert.equal(
+    describeRuleWindow({ shiftId: 2, shiftName: "Mid", startFrom: "11:00", startUntil: "16:00" }),
+    "catches starts 11:00 – 16:00"
+  );
+  assert.equal(
+    describeRuleWindow({ shiftId: 3, shiftName: "Close", startFrom: "16:00", startUntil: "23:59" }),
+    "catches starts 16:00 or later"
+  );
+});
+
+test("describeRuleWindow says so when a shift is never imported", () => {
+  assert.equal(describeRuleWindow(undefined), "not imported");
+});
+
+test("describeRuleWindow handles a window running past midnight", () => {
+  assert.equal(
+    describeRuleWindow({ shiftId: 3, shiftName: "Close", startFrom: "16:00", startUntil: "02:00" }),
+    "catches starts 16:00 or later, through 02:00"
+  );
 });

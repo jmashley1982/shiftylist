@@ -348,3 +348,20 @@ export function describeRuleProblems(rules: ShiftTimeRule[]): string[] {
 
   return problems;
 }
+
+/**
+ * One-line plain-English description of what a window catches, for the rules
+ * editor. These are sorting boundaries, not the shift's real hours — a store
+ * whose opener works 09:30–17:30 still wants the window "before 11:00" — and
+ * showing them as a bare "00:00 until 11:00" range reads like working hours,
+ * which is how a set of overlapping real-hours windows got entered here in
+ * the first place.
+ */
+export function describeRuleWindow(rule: ShiftTimeRule | undefined): string {
+  if (!rule) return "not imported";
+  const { startFrom, startUntil } = rule;
+  if (startFrom > startUntil) return `catches starts ${startFrom} or later, through ${startUntil}`;
+  if (startFrom === "00:00") return `catches starts before ${startUntil}`;
+  if (startUntil === "23:59" || startUntil === "00:00") return `catches starts ${startFrom} or later`;
+  return `catches starts ${startFrom} – ${startUntil}`;
+}
