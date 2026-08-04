@@ -58,27 +58,40 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export async function hasValidVikingSession(req: Request): Promise<boolean> {
+/**
+ * "ok" or the reason the check failed. The reason is surfaced as a query
+ * param on the login redirect so a misconfiguration diagnoses itself from
+ * the browser's address bar instead of failing silently — none of these
+ * values reveal anything an attacker couldn't already infer from being
+ * redirected.
+ */
+export type VikingAuthResult = "ok" | "no_secret" | "no_cookie" | "malformed" | "bad_sig" | "expired";
+
+export async function checkVikingSession(req: Request): Promise<VikingAuthResult> {
   const secret = process.env["SESSION_SECRET"];
   // Fail closed: an unset or too-short secret must never be treated as "let
   // everyone in" — same rule the ordering app applies to its own copy.
-  if (!secret || secret.length < 16) return false;
+  if (!secret || secret.length < 16) return "no_secret";
 
   const raw = readCookie(req, COOKIE_NAME);
-  if (!raw) return false;
+  if (!raw) return "no_cookie";
 
   const separator = raw.lastIndexOf(".");
-  if (separator === -1) return false;
+  if (separator === -1) return "malformed";
 
   const issuedAt = raw.slice(0, separator);
   const sig = raw.slice(separator + 1);
 
   const expected = await hmac(secret, issuedAt);
-  if (!timingSafeEqual(sig, expected)) return false;
+  if (!timingSafeEqual(sig, expected)) return "bad_sig";
 
   const ts = Number.parseInt(issuedAt, 10);
-  if (Number.isNaN(ts)) return false;
-  if (Date.now() - ts > SESSION_TTL_MS) return false;
+  if (Number.isNaN(ts)) return "malformed";
+  if (Date.now() - ts > SESSION_TTL_MS) return "expired";
 
-  return true;
+  return "ok";
+}
+
+export async function hasValidVikingSession(req: Request): Promise<boolean> {
+  return (await checkVikingSession(req)) === "ok";
 }
