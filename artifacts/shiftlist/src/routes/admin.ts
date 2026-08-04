@@ -14,6 +14,7 @@ import {
 import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
 import { ensureScheduleTables } from "../lib/scheduleTables.js";
 import { parseHomebaseCsv, matchShiftType, type ShiftTimeRule } from "../lib/homebaseCsv.js";
+import { matchEmployeeName } from "../lib/employeeMatch.js";
 
 // Mounted at /admin/shifts. There is no login here anymore — ensureAdminAuth
 // trusts the Viking ordering app's session cookie (see
@@ -729,23 +730,43 @@ router.post("/schedule/preview", async (req, res) => {
        FROM shift_time_rules r JOIN shifts s ON s.id = r.shift_id`
     ),
   ]);
-  const employeesByName = new Map<string, { id: number; name: string }>(
-    (empRes.rows as { id: number; name: string }[]).map((e) => [e.name.trim().toLowerCase(), e])
-  );
+  const employeeList = empRes.rows as { id: number; name: string }[];
   const rules = rulesRes.rows as ShiftTimeRule[];
 
   const matched: MatchedScheduleRow[] = [];
   const issues: { reason: string; detail: string }[] = [];
 
+  /** Staff names for the "here's what you could have meant" hint, kept short. */
+  const staffNamesHint =
+    employeeList.length === 0
+      ? "the staff list is empty — add staff on the Employees page first"
+      : employeeList
+          .slice(0, 8)
+          .map((e) => e.name)
+          .join(", ") + (employeeList.length > 8 ? ", …" : "");
+
   for (const row of parsedRows) {
-    const emp = employeesByName.get(row.employeeName.trim().toLowerCase());
-    if (!emp) {
+    // Homebase abbreviates to "First L."; the staff list usually has full
+    // names. See src/lib/employeeMatch.ts.
+    const match = matchEmployeeName(row.employeeName, employeeList);
+    if (match.kind === "ambiguous") {
       issues.push({
-        reason: "Unknown employee",
-        detail: `"${row.employeeName}" on ${row.date} — not in the staff list, skipped`,
+        reason: "Ambiguous name",
+        detail:
+          `"${row.employeeName}" on ${row.date} matches ${match.candidates.length} staff members ` +
+          `(${match.candidates.map((c) => c.name).join(", ")}) — rename one on the Employees page ` +
+          `so they can be told apart, then re-upload`,
       });
       continue;
     }
+    if (match.kind === "none") {
+      issues.push({
+        reason: "Unknown employee",
+        detail: `"${row.employeeName}" on ${row.date} doesn't match anyone in the staff list (${staffNamesHint})`,
+      });
+      continue;
+    }
+    const emp = match.employee;
     const rule = matchShiftType(row.startTime, rules);
     if (!rule) {
       issues.push({

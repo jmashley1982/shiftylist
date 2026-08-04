@@ -16,22 +16,28 @@ import { spawn } from "node:child_process";
 
 const artifactDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+const TEST_ENTRYPOINTS = ["src/lib/homebaseCsv.test.ts", "src/lib/employeeMatch.test.ts"];
+
 async function run() {
   const outDir = await mkdtemp(path.join(tmpdir(), "shiftlist-test-"));
-  const outFile = path.join(outDir, "homebaseCsv.test.mjs");
 
   try {
-    await esbuild({
-      entryPoints: [path.resolve(artifactDir, "src/lib/homebaseCsv.test.ts")],
-      platform: "node",
-      bundle: true,
-      format: "esm",
-      outfile: outFile,
-      logLevel: "info",
-    });
+    const outFiles = [];
+    for (const entry of TEST_ENTRYPOINTS) {
+      const outFile = path.join(outDir, path.basename(entry).replace(/\.ts$/, ".mjs"));
+      await esbuild({
+        entryPoints: [path.resolve(artifactDir, entry)],
+        platform: "node",
+        bundle: true,
+        format: "esm",
+        outfile: outFile,
+        logLevel: "info",
+      });
+      outFiles.push(outFile);
+    }
 
     await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, ["--test", outFile], { stdio: "inherit" });
+      const child = spawn(process.execPath, ["--test", ...outFiles], { stdio: "inherit" });
       child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`tests failed (exit ${code})`))));
     });
   } finally {
