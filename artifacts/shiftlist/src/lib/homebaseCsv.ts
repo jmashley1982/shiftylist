@@ -307,3 +307,44 @@ export function matchShiftType(startTime: string, rules: ShiftTimeRule[]): Shift
   }
   return null;
 }
+
+/**
+ * Human-readable problems with a set of time windows, for the rules editor.
+ *
+ * A misconfigured window is otherwise invisible until after an import has
+ * already filed people under the wrong shift — which is exactly how a store
+ * ends up with every closer sitting in the "Mid" column. Overlaps matter
+ * most: matchShiftType takes the first covering rule, so an overlap silently
+ * hands the row to whichever window starts earlier.
+ *
+ * Gaps are reported too, but only inside the working span the rules already
+ * cover — the hours before the first shift starts aren't a gap, they're just
+ * closed.
+ */
+export function describeRuleProblems(rules: ShiftTimeRule[]): string[] {
+  const sorted = [...rules].sort((a, b) => a.startFrom.localeCompare(b.startFrom));
+  const problems: string[] = [];
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const cur = sorted[i];
+    const next = sorted[i + 1];
+    // Wrapping windows (a close that runs past midnight) legitimately reach
+    // back past the others; comparing them linearly would cry wolf.
+    if (cur.startFrom > cur.startUntil) continue;
+
+    if (next.startFrom < cur.startUntil) {
+      problems.push(
+        `${cur.shiftName} (${cur.startFrom}–${cur.startUntil}) and ${next.shiftName} ` +
+          `(${next.startFrom}–${next.startUntil}) overlap — a start between ${next.startFrom} ` +
+          `and ${cur.startUntil} goes to ${cur.shiftName}.`
+      );
+    } else if (next.startFrom > cur.startUntil) {
+      problems.push(
+        `Nothing covers ${cur.startUntil}–${next.startFrom}, between ${cur.shiftName} and ${next.shiftName} — ` +
+          `a shift starting in there won't import.`
+      );
+    }
+  }
+
+  return problems;
+}

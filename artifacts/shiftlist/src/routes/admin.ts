@@ -12,8 +12,8 @@ import {
   getWeekStartStr,
 } from "../utils/dateHelpers.js";
 import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
-import { ensureScheduleTables } from "../lib/scheduleTables.js";
-import { parseHomebaseCsv, matchShiftType, type ShiftTimeRule } from "../lib/homebaseCsv.js";
+import { ensureScheduleTables, DEFAULT_TIME_RULES } from "../lib/scheduleTables.js";
+import { parseHomebaseCsv, matchShiftType, describeRuleProblems, type ShiftTimeRule } from "../lib/homebaseCsv.js";
 import { matchEmployeeName } from "../lib/employeeMatch.js";
 
 // Mounted at /admin/shifts. There is no login here anymore — ensureAdminAuth
@@ -684,6 +684,7 @@ async function loadScheduleWeek(weekStart: string) {
   return {
     shifts,
     rules,
+    ruleWarnings: describeRuleProblems(rules),
     weekDates,
     weekStart,
     prevWeek: addDaysToDateStr(weekStart, -7),
@@ -726,8 +727,12 @@ router.post("/schedule/preview", async (req, res) => {
   const [empRes, rulesRes] = await Promise.all([
     pool.query("SELECT id, name FROM employees"),
     pool.query(
+      // Ordered so an overlap resolves to the earliest window every time —
+      // matchShiftType takes the first covering rule, and without ORDER BY
+      // two overlapping windows could sort a row differently per request.
       `SELECT r.shift_id as "shiftId", s.name as "shiftName", r.start_from as "startFrom", r.start_until as "startUntil"
-       FROM shift_time_rules r JOIN shifts s ON s.id = r.shift_id`
+       FROM shift_time_rules r JOIN shifts s ON s.id = r.shift_id
+       ORDER BY r.start_from`
     ),
   ]);
   const employeeList = empRes.rows as { id: number; name: string }[];
@@ -871,11 +876,37 @@ router.post("/schedule/rules", async (req, res) => {
   const body = req.body as Record<string, string>;
   const weekStart = resolveWeekParam(body.week);
 
-  const shiftsRes = await pool.query("SELECT id FROM shifts");
-  for (const { id } of shiftsRes.rows as { id: number }[]) {
-    const startFrom = (body[`start_from_${id}`] || "").trim();
-    const startUntil = (body[`start_until_${id}`] || "").trim();
-    if (!/^\d{2}:\d{2}$/.test(startFrom) || !/^\d{2}:\d{2}$/.test(startUntil)) continue;
+  const shiftsRes = await pool.query("SELECT id, name FROM shifts");
+  const shifts = shiftsRes.rows as { id: number; name: string }[];
+
+  // "Reset to recommended" rewrites every shift from DEFAULT_TIME_RULES —
+  // the escape hatch for a configuration that has drifted into overlapping
+  // or shifted windows, where fixing it by hand means knowing which of the
+  // pairs is the wrong one.
+  const isReset = body.reset === "1";
+
+  for (const { id, name } of shifts) {
+    let startFrom: string;
+    let startUntil: string;
+
+    if (isReset) {
+      const preset = DEFAULT_TIME_RULES.find((r) => r.shiftName.toLowerCase() === name.trim().toLowerCase());
+      startFrom = preset?.startFrom ?? "";
+      startUntil = preset?.startUntil ?? "";
+    } else {
+      startFrom = (body[`start_from_${id}`] || "").trim();
+      startUntil = (body[`start_until_${id}`] || "").trim();
+    }
+
+    const bothSet = /^\d{2}:\d{2}$/.test(startFrom) && /^\d{2}:\d{2}$/.test(startUntil);
+
+    // Blank (or half-filled, which can't sort anything) means this shift is
+    // manual-only: drop its rule so imports stop trying to land rows in it.
+    if (!bothSet) {
+      await pool.query("DELETE FROM shift_time_rules WHERE shift_id = $1", [id]);
+      continue;
+    }
+
     await pool.query(
       `INSERT INTO shift_time_rules (shift_id, start_from, start_until) VALUES ($1, $2, $3)
        ON CONFLICT (shift_id) DO UPDATE SET start_from = EXCLUDED.start_from, start_until = EXCLUDED.start_until`,

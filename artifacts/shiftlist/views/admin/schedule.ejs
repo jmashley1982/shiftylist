@@ -106,7 +106,8 @@
       <div class="panel" style="margin-bottom:16px;">
         <div class="panel-header"><h2 style="font-size:1rem;">Shift time windows</h2></div>
         <p style="font-size:0.82rem; color:var(--muted); margin:0 0 12px;">
-          Used to sort each imported start time into one of your shifts.
+          Used to sort each imported start time into one of your shifts. Leave a
+          shift blank if it never comes from Homebase — staff still pick it by hand.
         </p>
         <form method="POST" action="<%= adminUrl('/schedule/rules') %>">
           <input type="hidden" name="week" value="<%= weekStart %>">
@@ -115,14 +116,30 @@
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
               <span class="shift-badge" style="min-width:70px; text-align:center;"><%= s.name %></span>
               <label style="font-size:0.8rem; color:var(--muted);">From</label>
-              <input type="time" name="start_from_<%= s.id %>" value="<%= rule ? rule.startFrom : '' %>" required
+              <input type="time" name="start_from_<%= s.id %>" value="<%= rule ? rule.startFrom : '' %>"
                      style="width:auto; min-height:34px; font-size:0.85rem; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
               <label style="font-size:0.8rem; color:var(--muted);">until</label>
-              <input type="time" name="start_until_<%= s.id %>" value="<%= rule ? rule.startUntil : '' %>" required
+              <input type="time" name="start_until_<%= s.id %>" value="<%= rule ? rule.startUntil : '' %>"
                      style="width:auto; min-height:34px; font-size:0.85rem; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+              <span style="font-size:0.78rem; color:var(--muted);">
+                <% if (!rule) { %>not imported<% } else { %>a <%= rule.startFrom %> start lands here<% } %>
+              </span>
             </div>
           <% }); %>
-          <button type="submit" class="btn btn-ghost btn-sm">Save time windows</button>
+
+          <% if (typeof ruleWarnings !== 'undefined' && ruleWarnings.length > 0) { %>
+            <div class="alert alert-info" style="margin:12px 0; font-size:0.82rem;">
+              <% ruleWarnings.forEach(function(w) { %><div><%= w %></div><% }); %>
+            </div>
+          <% } %>
+
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="submit" class="btn btn-ghost btn-sm">Save time windows</button>
+            <button type="submit" name="reset" value="1" class="btn btn-ghost btn-sm"
+                    onclick="return confirm('Reset to Open before 11:00, Mid 11:00–16:00, Close 16:00 onward, and clear every other shift?');">
+              Reset to recommended
+            </button>
+          </div>
         </form>
       </div>
     <% } %>

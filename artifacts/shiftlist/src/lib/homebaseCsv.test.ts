@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseHomebaseCsv, matchShiftType } from "./homebaseCsv.js";
+import { parseHomebaseCsv, matchShiftType, describeRuleProblems } from "./homebaseCsv.js";
 
 test("parses a straightforward export", () => {
   const csv = [
@@ -141,4 +141,70 @@ test("matchShiftType handles a rule that wraps past midnight", () => {
 test("matchShiftType returns null when nothing covers the time", () => {
   const rules = [{ shiftId: 1, shiftName: "Mid", startFrom: "11:00", startUntil: "16:00" }];
   assert.equal(matchShiftType("09:00", rules), null);
+});
+
+// ─── The store's real windows, against its real start times ────────────────
+// Regression guard for a live import that filed every 12:00 start under Open
+// and every 17:00 start under Mid.
+
+const DEFAULT_WINDOWS = [
+  { shiftId: 1, shiftName: "Open", startFrom: "00:00", startUntil: "11:00" },
+  { shiftId: 2, shiftName: "Mid", startFrom: "11:00", startUntil: "16:00" },
+  { shiftId: 3, shiftName: "Close", startFrom: "16:00", startUntil: "23:59" },
+];
+
+test("the recommended windows sort this store's real start times", () => {
+  assert.equal(matchShiftType("09:30", DEFAULT_WINDOWS)?.shiftName, "Open");
+  assert.equal(matchShiftType("12:00", DEFAULT_WINDOWS)?.shiftName, "Mid");
+  assert.equal(matchShiftType("17:00", DEFAULT_WINDOWS)?.shiftName, "Close");
+});
+
+test("a shift with no window never takes an imported row", () => {
+  // "Staff Meeting" is picked by hand; it has no rule, so it can't appear
+  // in the rule list at all and nothing can be sorted into it.
+  const names = ["09:30", "12:00", "17:00"].map((t) => matchShiftType(t, DEFAULT_WINDOWS)?.shiftName);
+  assert.deepEqual(names, ["Open", "Mid", "Close"]);
+  assert.ok(!names.includes("Staff Meeting"));
+});
+
+test("overlapping windows resolve to the earlier one, deterministically", () => {
+  // The route sorts rules by start_from before calling this, so the caller
+  // sees the same answer on every request rather than row order roulette.
+  const overlapping = [
+    { shiftId: 1, shiftName: "Open", startFrom: "00:00", startUntil: "16:00" },
+    { shiftId: 2, shiftName: "Mid", startFrom: "11:00", startUntil: "20:00" },
+  ];
+  assert.equal(matchShiftType("12:00", overlapping)?.shiftName, "Open");
+});
+
+test("describeRuleProblems stays quiet on a sane configuration", () => {
+  assert.deepEqual(describeRuleProblems(DEFAULT_WINDOWS), []);
+});
+
+test("describeRuleProblems names the overlap that would misfile a shift", () => {
+  const overlapping = [
+    { shiftId: 1, shiftName: "Open", startFrom: "00:00", startUntil: "16:00" },
+    { shiftId: 2, shiftName: "Mid", startFrom: "11:00", startUntil: "20:00" },
+  ];
+  const problems = describeRuleProblems(overlapping);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /Open.*Mid.*overlap/);
+});
+
+test("describeRuleProblems reports an uncovered stretch between shifts", () => {
+  const gapped = [
+    { shiftId: 1, shiftName: "Open", startFrom: "00:00", startUntil: "11:00" },
+    { shiftId: 2, shiftName: "Close", startFrom: "16:00", startUntil: "23:59" },
+  ];
+  const problems = describeRuleProblems(gapped);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /11:00–16:00/);
+});
+
+test("a window wrapping past midnight isn't reported as a problem", () => {
+  const wrapping = [
+    { shiftId: 1, shiftName: "Open", startFrom: "06:00", startUntil: "14:00" },
+    { shiftId: 2, shiftName: "Close", startFrom: "14:00", startUntil: "02:00" },
+  ];
+  assert.deepEqual(describeRuleProblems(wrapping), []);
 });

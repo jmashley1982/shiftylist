@@ -12,7 +12,16 @@ import { pool } from "../db/index.js";
  */
 let ensured = false;
 
-const DEFAULT_TIME_RULES: { shiftName: string; startFrom: string; startUntil: string }[] = [
+/**
+ * Also used by the "Reset to recommended windows" button on the schedule
+ * page, so a store that has drifted into a broken configuration can get back
+ * to a known-good one in a click. Exported deliberately: the seed and the
+ * reset must never disagree about what "recommended" means.
+ *
+ * Shifts not listed here get no window at all — "Staff Meeting" and similar
+ * are picked manually by staff, never matched from a Homebase import.
+ */
+export const DEFAULT_TIME_RULES: { shiftName: string; startFrom: string; startUntil: string }[] = [
   { shiftName: "Open", startFrom: "00:00", startUntil: "11:00" },
   { shiftName: "Mid", startFrom: "11:00", startUntil: "16:00" },
   { shiftName: "Close", startFrom: "16:00", startUntil: "23:59" },
