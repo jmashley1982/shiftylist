@@ -52,6 +52,17 @@
     </div>
     <% } %>
 
+    <% if (notYetOpened.length > 0) { %>
+    <div class="alert alert-warning" style="margin-bottom:20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span>⏰</span>
+      <span>
+        Scheduled today, not opened yet:
+        <strong><%= notYetOpened.join(', ') %></strong>
+      </span>
+      <a href="<%= adminUrl('/schedule') %>" style="margin-left:auto; color:inherit; font-weight:700; text-decoration:underline; white-space:nowrap;">Schedule →</a>
+    </div>
+    <% } %>
+
     <div class="dash-grid">
 
       <!-- ── LEFT / MAIN COLUMN ─────────────────────────────────── -->
@@ -179,6 +190,7 @@
           <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin-bottom:10px;">Quick Actions</div>
           <div style="display:flex; flex-direction:column; gap:7px;">
             <a href="<%= adminUrl('/live') %>" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">🟢&nbsp; Live View</a>
+            <a href="<%= adminUrl('/schedule') %>" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">🗓️&nbsp; Schedule</a>
             <a href="<%= adminUrl('/build') %>" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">📋&nbsp; Build Checklists</a>
             <a href="<%= adminUrl('/employees') %>" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">👥&nbsp; Manage Staff</a>
             <a href="<%= adminUrl('/reports') %>" class="btn btn-ghost btn-full" style="justify-content:flex-start; gap:10px;">📊&nbsp; View Reports</a>

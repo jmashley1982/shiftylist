@@ -23,6 +23,10 @@
     <span class="tab-icon">🟢</span>
     <span>Live</span>
   </a>
+  <a href="<%= adminUrl('/schedule') %>" class="admin-tab-link <%= active === 'schedule' ? 'active' : '' %>">
+    <span class="tab-icon">🗓️</span>
+    <span>Schedule</span>
+  </a>
   <a href="<%= adminUrl('/reports') %>" class="admin-tab-link <%= active === 'reports' ? 'active' : '' %>">
     <span class="tab-icon">📊</span>
     <span>Reports</span>

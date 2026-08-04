@@ -3,8 +3,17 @@ import type { PoolClient } from "pg";
 import { pool } from "../db/index.js";
 import { ensureAdminAuth } from "../middleware/auth.js";
 import { adminUrl } from "../lib/urls.js";
-import { getTodayStr, getBusinessDayStr, formatDateDisplay, formatLocalTime } from "../utils/dateHelpers.js";
+import {
+  getTodayStr,
+  getBusinessDayStr,
+  formatDateDisplay,
+  formatLocalTime,
+  addDaysToDateStr,
+  getWeekStartStr,
+} from "../utils/dateHelpers.js";
 import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
+import { ensureScheduleTables } from "../lib/scheduleTables.js";
+import { parseHomebaseCsv, matchShiftType, type ShiftTimeRule } from "../lib/homebaseCsv.js";
 
 // Mounted at /admin/shifts. There is no login here anymore — ensureAdminAuth
 // trusts the Viking ordering app's session cookie (see
@@ -80,6 +89,27 @@ router.get("/", async (_req, res) => {
   todayDate.setDate(todayDate.getDate() - 1);
   const yesterday = todayDate.toISOString().slice(0, 10);
 
+  let notYetOpened: string[] = [];
+  try {
+    await ensureScheduleTables();
+    const [scheduledRes, openedRes] = await Promise.all([
+      pool.query("SELECT DISTINCT employee_name FROM scheduled_shifts WHERE date = $1", [today]),
+      pool.query(
+        `SELECT employee_name FROM active_sessions WHERE date = $1
+         UNION
+         SELECT employee_name FROM submissions WHERE date = $1`,
+        [today]
+      ),
+    ]);
+    const opened = new Set((openedRes.rows as { employee_name: string }[]).map((r) => r.employee_name));
+    notYetOpened = (scheduledRes.rows as { employee_name: string }[])
+      .map((r) => r.employee_name)
+      .filter((name) => !opened.has(name));
+  } catch {
+    // Schedule feature is additive — a hiccup here shouldn't break the dashboard.
+    notYetOpened = [];
+  }
+
   const [empRes, shiftRes, taskRes, extraRes, activityRes, todaySubsRes, yesNotesRes, liveResult] = await Promise.all([
     pool.query("SELECT COUNT(*) as count FROM employees"),
     pool.query("SELECT COUNT(*) as count FROM shifts"),
@@ -131,6 +161,7 @@ router.get("/", async (_req, res) => {
     yesterdayNotes: yesNotesRes.rows as { employee_name: string; shift_name: string; notes: string; submitted_at: Date; auto_submitted: boolean }[],
     shiftData: liveResult.shiftData,
     activeSessions: liveResult.activeSessions,
+    notYetOpened,
     today,
     yesterday,
     formatLocalTime,
@@ -574,6 +605,342 @@ router.get("/live/data", async (_req, res) => {
   const today = getBusinessDayStr();
   const { shiftData, activeSessions } = await fetchLiveData(today);
   res.json({ shiftData, activeSessions, today });
+});
+
+// ════════════════════════════════════ Schedule (Homebase import) ═════════════
+//
+// Homebase's API is Enterprise-tier; the store is on a lower plan. Instead,
+// a manager exports the week's schedule from Homebase as a CSV and uploads it
+// here. scheduled_shifts is who is *supposed* to work — task_completions,
+// active_sessions and submissions (used elsewhere in this file) are what
+// *actually happened*. /schedule/report cross-references the two.
+
+interface MatchedScheduleRow {
+  employeeId: number;
+  employeeName: string;
+  date: string;
+  shiftId: number;
+  shiftName: string;
+  startTime: string;
+  endTime: string | null;
+}
+
+function isMatchedScheduleRow(r: unknown): r is MatchedScheduleRow {
+  if (!r || typeof r !== "object") return false;
+  const o = r as Record<string, unknown>;
+  return (
+    typeof o.employeeId === "number" &&
+    typeof o.employeeName === "string" &&
+    typeof o.date === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(o.date) &&
+    typeof o.shiftId === "number" &&
+    typeof o.shiftName === "string" &&
+    typeof o.startTime === "string" &&
+    /^\d{2}:\d{2}$/.test(o.startTime) &&
+    (o.endTime === null || typeof o.endTime === "string")
+  );
+}
+
+/** Loads everything the schedule grid needs for the week starting weekStart. */
+async function loadScheduleWeek(weekStart: string) {
+  const weekDates = Array.from({ length: 7 }, (_, i) => addDaysToDateStr(weekStart, i));
+
+  const [shiftsRes, rulesRes, scheduledRes] = await Promise.all([
+    pool.query(
+      `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
+    ),
+    pool.query(
+      `SELECT r.shift_id as "shiftId", s.name as "shiftName", r.start_from as "startFrom", r.start_until as "startUntil"
+       FROM shift_time_rules r JOIN shifts s ON s.id = r.shift_id
+       ORDER BY r.start_from`
+    ),
+    pool.query(
+      `SELECT date, employee_name, shift_id, start_time, end_time
+       FROM scheduled_shifts WHERE date = ANY($1::text[])
+       ORDER BY start_time`,
+      [weekDates]
+    ),
+  ]);
+
+  const shifts = shiftsRes.rows as { id: number; name: string }[];
+  const rules = rulesRes.rows as ShiftTimeRule[];
+
+  const grid = new Map<string, Map<number, { employeeName: string; startTime: string; endTime: string | null }[]>>();
+  for (const date of weekDates) grid.set(date, new Map(shifts.map((s) => [s.id, []])));
+  for (const row of scheduledRes.rows as {
+    date: string;
+    employee_name: string;
+    shift_id: number;
+    start_time: string;
+    end_time: string | null;
+  }[]) {
+    const dayMap = grid.get(row.date);
+    if (!dayMap) continue;
+    if (!dayMap.has(row.shift_id)) dayMap.set(row.shift_id, []);
+    dayMap.get(row.shift_id)!.push({ employeeName: row.employee_name, startTime: row.start_time, endTime: row.end_time });
+  }
+
+  return {
+    shifts,
+    rules,
+    weekDates,
+    weekStart,
+    prevWeek: addDaysToDateStr(weekStart, -7),
+    nextWeek: addDaysToDateStr(weekStart, 7),
+    grid,
+  };
+}
+
+function resolveWeekParam(raw: unknown): string {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  const anchor = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : getBusinessDayStr();
+  return getWeekStartStr(anchor);
+}
+
+router.get("/schedule", async (req, res) => {
+  await ensureScheduleTables();
+  await pool.query("DELETE FROM scheduled_shifts WHERE date::date < CURRENT_DATE - INTERVAL '60 days'");
+
+  const weekStart = resolveWeekParam(req.query.week);
+  const week = await loadScheduleWeek(weekStart);
+
+  res.render("admin/schedule", {
+    ...week,
+    today: getBusinessDayStr(),
+    preview: null,
+    imported: req.query.imported ? Number(req.query.imported) : null,
+    importError: req.query.importError === "1",
+    rulesSaved: req.query.rulesSaved === "1",
+    formatDateDisplay,
+  });
+});
+
+router.post("/schedule/preview", async (req, res) => {
+  await ensureScheduleTables();
+  const weekStart = resolveWeekParam(req.body.week);
+  const csvText = typeof req.body.csvText === "string" ? req.body.csvText : "";
+
+  const { rows: parsedRows, skipped: parseSkipped } = parseHomebaseCsv(csvText);
+
+  const [empRes, rulesRes] = await Promise.all([
+    pool.query("SELECT id, name FROM employees"),
+    pool.query(
+      `SELECT r.shift_id as "shiftId", s.name as "shiftName", r.start_from as "startFrom", r.start_until as "startUntil"
+       FROM shift_time_rules r JOIN shifts s ON s.id = r.shift_id`
+    ),
+  ]);
+  const employeesByName = new Map<string, { id: number; name: string }>(
+    (empRes.rows as { id: number; name: string }[]).map((e) => [e.name.trim().toLowerCase(), e])
+  );
+  const rules = rulesRes.rows as ShiftTimeRule[];
+
+  const matched: MatchedScheduleRow[] = [];
+  const issues: { reason: string; detail: string }[] = [];
+
+  for (const row of parsedRows) {
+    const emp = employeesByName.get(row.employeeName.trim().toLowerCase());
+    if (!emp) {
+      issues.push({
+        reason: "Unknown employee",
+        detail: `"${row.employeeName}" on ${row.date} — not in the staff list, skipped`,
+      });
+      continue;
+    }
+    const rule = matchShiftType(row.startTime, rules);
+    if (!rule) {
+      issues.push({
+        reason: "No matching shift",
+        detail: `${emp.name} starts at ${row.startTime} on ${row.date} — no shift's time window covers that, skipped`,
+      });
+      continue;
+    }
+    matched.push({
+      employeeId: emp.id,
+      employeeName: emp.name,
+      date: row.date,
+      shiftId: rule.shiftId,
+      shiftName: rule.shiftName,
+      startTime: row.startTime,
+      endTime: row.endTime,
+    });
+  }
+
+  for (const s of parseSkipped) {
+    issues.push({ reason: "Unreadable row", detail: `Row ${s.rowNumber}: ${s.reason}` });
+  }
+
+  const week = await loadScheduleWeek(weekStart);
+
+  res.render("admin/schedule", {
+    ...week,
+    today: getBusinessDayStr(),
+    preview: { matched, issues, matchedJson: JSON.stringify(matched) },
+    imported: null,
+    importError: false,
+    rulesSaved: false,
+    formatDateDisplay,
+  });
+});
+
+router.post("/schedule/commit", async (req, res) => {
+  await ensureScheduleTables();
+  const weekStart = resolveWeekParam(req.body.week);
+
+  let parsed: unknown = [];
+  try {
+    parsed = JSON.parse(typeof req.body.matchedJson === "string" ? req.body.matchedJson : "[]");
+  } catch {
+    parsed = [];
+  }
+  const rows = (Array.isArray(parsed) ? parsed : []).filter(isMatchedScheduleRow);
+
+  if (rows.length === 0) {
+    return void res.redirect(`${adminUrl("/schedule")}?week=${weekStart}&importError=1`);
+  }
+
+  const dates = [...new Set(rows.map((r) => r.date))];
+
+  await withTransaction(async (client) => {
+    await client.query("DELETE FROM scheduled_shifts WHERE date = ANY($1::text[])", [dates]);
+    for (const r of rows) {
+      await client.query(
+        `INSERT INTO scheduled_shifts (date, employee_id, employee_name, shift_id, start_time, end_time)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (date, employee_id, start_time) DO NOTHING`,
+        [r.date, r.employeeId, r.employeeName, r.shiftId, r.startTime, r.endTime]
+      );
+    }
+  });
+
+  res.redirect(`${adminUrl("/schedule")}?week=${weekStart}&imported=${rows.length}`);
+});
+
+router.post("/schedule/rules", async (req, res) => {
+  await ensureScheduleTables();
+  const body = req.body as Record<string, string>;
+  const weekStart = resolveWeekParam(body.week);
+
+  const shiftsRes = await pool.query("SELECT id FROM shifts");
+  for (const { id } of shiftsRes.rows as { id: number }[]) {
+    const startFrom = (body[`start_from_${id}`] || "").trim();
+    const startUntil = (body[`start_until_${id}`] || "").trim();
+    if (!/^\d{2}:\d{2}$/.test(startFrom) || !/^\d{2}:\d{2}$/.test(startUntil)) continue;
+    await pool.query(
+      `INSERT INTO shift_time_rules (shift_id, start_from, start_until) VALUES ($1, $2, $3)
+       ON CONFLICT (shift_id) DO UPDATE SET start_from = EXCLUDED.start_from, start_until = EXCLUDED.start_until`,
+      [id, startFrom, startUntil]
+    );
+  }
+
+  res.redirect(`${adminUrl("/schedule")}?week=${weekStart}&rulesSaved=1`);
+});
+
+router.get("/schedule/report", async (_req, res) => {
+  await ensureScheduleTables();
+  const today = getBusinessDayStr();
+  const windowStart = addDaysToDateStr(today, -30);
+
+  const [schedRes, subsRes, activeRes, compRes] = await Promise.all([
+    pool.query(
+      `SELECT ss.date, ss.employee_name, ss.shift_id, s.name as shift_name, ss.start_time
+       FROM scheduled_shifts ss JOIN shifts s ON s.id = ss.shift_id
+       WHERE ss.date >= $1 AND ss.date <= $2
+       ORDER BY ss.date DESC, ss.start_time`,
+      [windowStart, today]
+    ),
+    pool.query(
+      `SELECT employee_name, date, shift_name, auto_submitted FROM submissions WHERE date >= $1 AND date <= $2`,
+      [windowStart, today]
+    ),
+    pool.query(`SELECT employee_name, shift_name, date FROM active_sessions WHERE date >= $1 AND date <= $2`, [
+      windowStart,
+      today,
+    ]),
+    pool.query(
+      `SELECT DISTINCT completed_by_name, date, shift_id FROM task_completions WHERE date >= $1 AND date <= $2`,
+      [windowStart, today]
+    ),
+  ]);
+
+  const key = (date: string, shift: string, name: string) => `${date}|${shift}|${name}`;
+
+  const submittedMap = new Map<string, boolean>();
+  for (const r of subsRes.rows as { employee_name: string; date: string; shift_name: string; auto_submitted: boolean }[]) {
+    submittedMap.set(key(r.date, r.shift_name, r.employee_name), r.auto_submitted);
+  }
+
+  const openedByShiftName = new Set<string>();
+  for (const r of activeRes.rows as { employee_name: string; shift_name: string; date: string }[]) {
+    openedByShiftName.add(key(r.date, r.shift_name, r.employee_name));
+  }
+  const openedByShiftId = new Set<string>();
+  for (const r of compRes.rows as { completed_by_name: string; date: string; shift_id: number }[]) {
+    openedByShiftId.add(`${r.date}|${r.shift_id}|${r.completed_by_name}`);
+  }
+
+  interface ReportRow {
+    date: string;
+    employeeName: string;
+    shiftName: string;
+    shiftId: number;
+    startTime: string;
+    status: "submitted" | "auto_submitted" | "opened_not_submitted" | "never_opened";
+  }
+
+  const reportRows: ReportRow[] = (
+    schedRes.rows as { date: string; employee_name: string; shift_id: number; shift_name: string; start_time: string }[]
+  ).map((r) => {
+    const k = key(r.date, r.shift_name, r.employee_name);
+    let status: ReportRow["status"];
+    if (submittedMap.has(k)) {
+      status = submittedMap.get(k) ? "auto_submitted" : "submitted";
+    } else if (openedByShiftName.has(k) || openedByShiftId.has(`${r.date}|${r.shift_id}|${r.employee_name}`)) {
+      status = "opened_not_submitted";
+    } else {
+      status = "never_opened";
+    }
+    return {
+      date: r.date,
+      employeeName: r.employee_name,
+      shiftName: r.shift_name,
+      shiftId: r.shift_id,
+      startTime: r.start_time,
+      status,
+    };
+  });
+
+  const summaryMap = new Map<
+    string,
+    { scheduled: number; submitted: number; openedNotSubmitted: number; neverOpened: number; misses: ReportRow[] }
+  >();
+  for (const row of reportRows) {
+    if (!summaryMap.has(row.employeeName)) {
+      summaryMap.set(row.employeeName, { scheduled: 0, submitted: 0, openedNotSubmitted: 0, neverOpened: 0, misses: [] });
+    }
+    const s = summaryMap.get(row.employeeName)!;
+    s.scheduled++;
+    if (row.status === "submitted" || row.status === "auto_submitted") s.submitted++;
+    else if (row.status === "opened_not_submitted") {
+      s.openedNotSubmitted++;
+      s.misses.push(row);
+    } else {
+      s.neverOpened++;
+      s.misses.push(row);
+    }
+  }
+
+  const summary = [...summaryMap.entries()]
+    .map(([employeeName, s]) => ({ employeeName, ...s }))
+    .sort((a, b) => b.neverOpened - a.neverOpened || a.employeeName.localeCompare(b.employeeName));
+
+  res.render("admin/schedule-report", {
+    reportRows,
+    summary,
+    windowStart,
+    today,
+    formatDateDisplay,
+    formatLocalTime,
+  });
 });
 
 // ════════════════════════════════════ Reports ═════════════════════════════════

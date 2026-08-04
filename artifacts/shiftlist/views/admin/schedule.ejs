@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Schedule</title>
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'schedule' }) %>
+  <div class="main-content">
+    <div class="page-header" style="margin-top:12px;">
+      <h1>Schedule</h1>
+      <p>Imported from Homebase — who's supposed to work, cross-checked against who actually showed up.</p>
+    </div>
+
+    <% if (imported) { %>
+      <div class="alert alert-success" style="margin-bottom:16px;">Imported <%= imported %> shift<%= imported === 1 ? '' : 's' %>.</div>
+    <% } %>
+    <% if (importError) { %>
+      <div class="alert alert-error" style="margin-bottom:16px;">Nothing to import — check the file and try again.</div>
+    <% } %>
+    <% if (rulesSaved) { %>
+      <div class="alert alert-success" style="margin-bottom:16px;">Time windows saved.</div>
+    <% } %>
+
+    <!-- ─────────────────── PREVIEW (after an upload) ─────────────────── -->
+    <% if (preview) { %>
+      <div class="panel" style="margin-bottom:16px; border-color:var(--brand);">
+        <div class="panel-header">
+          <h2>Preview — <%= preview.matched.length %> shift<%= preview.matched.length === 1 ? '' : 's' %> ready to import</h2>
+        </div>
+
+        <% if (preview.issues.length > 0) { %>
+          <div class="alert alert-warning" style="margin-bottom:12px;">
+            <%= preview.issues.length %> row<%= preview.issues.length === 1 ? '' : 's' %> skipped:
+            <ul style="margin:6px 0 0; padding-left:18px;">
+              <% preview.issues.forEach(function(issue) { %>
+                <li style="font-size:0.85rem;"><strong><%= issue.reason %>:</strong> <%= issue.detail %></li>
+              <% }); %>
+            </ul>
+          </div>
+        <% } %>
+
+        <% if (preview.matched.length > 0) { %>
+          <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:14px; max-height:340px; overflow-y:auto;">
+            <% preview.matched.forEach(function(row) { %>
+              <div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border); font-size:0.88rem; flex-wrap:wrap;">
+                <span style="flex:1; min-width:100px;"><%= row.employeeName %></span>
+                <span style="color:var(--muted);"><%= formatDateDisplay(row.date) %></span>
+                <span class="shift-badge" style="font-size:0.72rem;"><%= row.shiftName %></span>
+                <span style="color:var(--muted); white-space:nowrap;"><%= row.startTime %><%= row.endTime ? '–' + row.endTime : '' %></span>
+              </div>
+            <% }); %>
+          </div>
+
+          <form method="POST" action="<%= adminUrl('/schedule/commit') %>">
+            <input type="hidden" name="week" value="<%= weekStart %>">
+            <input type="hidden" name="matchedJson" value="<%= preview.matchedJson %>">
+            <button type="submit" class="btn btn-primary btn-full">Import <%= preview.matched.length %> shift<%= preview.matched.length === 1 ? '' : 's' %></button>
+          </form>
+        <% } else { %>
+          <p style="color:var(--muted); font-size:0.9rem; margin:0;">Nothing to import — fix the issues above and re-upload.</p>
+        <% } %>
+      </div>
+    <% } %>
+
+    <!-- ─────────────────── UPLOAD ─────────────────── -->
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-header"><h2 style="font-size:1rem;">Import from Homebase</h2></div>
+      <form method="POST" action="<%= adminUrl('/schedule/preview') %>" id="scheduleUploadForm" class="form-stack">
+        <input type="hidden" name="week" value="<%= weekStart %>">
+        <textarea name="csvText" id="csvTextField" style="display:none;"></textarea>
+        <div class="form-group">
+          <label>Homebase CSV export</label>
+          <input type="file" accept=".csv,text/csv" id="csvFileInput" required>
+        </div>
+        <p style="font-size:0.8rem; color:var(--muted); margin:0 0 10px;">
+          Export the week's schedule from Homebase, then upload the CSV here. If it downloads as an Excel file,
+          open it and use File → Save as CSV first. Uploading replaces any previously imported shifts for the dates in the file.
+        </p>
+        <button type="submit" class="btn btn-primary btn-full" id="csvPreviewBtn">Preview import</button>
+      </form>
+    </div>
+
+    <!-- ─────────────────── TIME WINDOWS ─────────────────── -->
+    <% if (shifts.length > 0) { %>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header"><h2 style="font-size:1rem;">Shift time windows</h2></div>
+        <p style="font-size:0.82rem; color:var(--muted); margin:0 0 12px;">
+          Used to sort each imported start time into one of your shifts.
+        </p>
+        <form method="POST" action="<%= adminUrl('/schedule/rules') %>">
+          <input type="hidden" name="week" value="<%= weekStart %>">
+          <% shifts.forEach(function(s) { %>
+            <% var rule = rules.find(function(r) { return r.shiftId === s.id; }); %>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+              <span class="shift-badge" style="min-width:70px; text-align:center;"><%= s.name %></span>
+              <label style="font-size:0.8rem; color:var(--muted);">From</label>
+              <input type="time" name="start_from_<%= s.id %>" value="<%= rule ? rule.startFrom : '' %>" required
+                     style="width:auto; min-height:34px; font-size:0.85rem; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+              <label style="font-size:0.8rem; color:var(--muted);">until</label>
+              <input type="time" name="start_until_<%= s.id %>" value="<%= rule ? rule.startUntil : '' %>" required
+                     style="width:auto; min-height:34px; font-size:0.85rem; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text);">
+            </div>
+          <% }); %>
+          <button type="submit" class="btn btn-ghost btn-sm">Save time windows</button>
+        </form>
+      </div>
+    <% } %>
+
+    <!-- ─────────────────── WEEK GRID ─────────────────── -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:8px; flex-wrap:wrap;">
+      <a href="<%= adminUrl('/schedule') %>?week=<%= prevWeek %>" class="btn btn-sm btn-ghost">← Prev week</a>
+      <div style="font-weight:700; font-size:0.92rem;"><%= formatDateDisplay(weekDates[0]) %> – <%= formatDateDisplay(weekDates[6]) %></div>
+      <a href="<%= adminUrl('/schedule') %>?week=<%= nextWeek %>" class="btn btn-sm btn-ghost">Next week →</a>
+    </div>
+
+    <% if (shifts.length === 0) { %>
+      <div class="alert alert-info" style="margin-bottom:16px;">
+        Create your shift types on the <a href="<%= adminUrl('/build') %>" style="color:inherit; text-decoration:underline;">Shifts</a> page first — the schedule needs Open/Mid/Close (or whatever you call them) to sort imports into.
+      </div>
+    <% } else { %>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
+        <% weekDates.forEach(function(date) { %>
+          <div class="panel" style="padding:12px 14px; <%= date === today ? 'border-color:var(--brand);' : '' %>">
+            <div style="font-weight:700; font-size:0.9rem; margin-bottom:8px;">
+              <%= formatDateDisplay(date) %><%= date === today ? ' · Today' : '' %>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <% shifts.forEach(function(s) { %>
+                <% var entries = grid.get(date).get(s.id) || []; %>
+                <div style="display:flex; align-items:flex-start; gap:10px;">
+                  <span class="shift-badge" style="font-size:0.72rem; flex-shrink:0; min-width:56px; text-align:center;"><%= s.name %></span>
+                  <% if (entries.length === 0) { %>
+                    <span style="color:var(--muted); font-size:0.85rem;">—</span>
+                  <% } else { %>
+                    <span style="font-size:0.85rem; flex:1;">
+                      <% entries.forEach(function(e, i) { %><%= i > 0 ? ', ' : '' %><%= e.employeeName %> <span style="color:var(--muted);">(<%= e.startTime %><%= e.endTime ? '–' + e.endTime : '' %>)</span><% }); %>
+                    </span>
+                  <% } %>
+                </div>
+              <% }); %>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <a href="<%= adminUrl('/schedule/report') %>" class="btn btn-outline btn-full">View accountability report →</a>
+  </div>
+
+  <script>
+    (function () {
+      var form = document.getElementById('scheduleUploadForm');
+      var fileInput = document.getElementById('csvFileInput');
+      var textField = document.getElementById('csvTextField');
+      var btn = document.getElementById('csvPreviewBtn');
+      if (!form || !fileInput || !textField) return;
+
+      form.addEventListener('submit', function (e) {
+        var file = fileInput.files[0];
+        if (!file) return; // native "required" handles the empty case
+        e.preventDefault();
+        if (btn) { btn.disabled = true; btn.textContent = 'Reading file…'; }
+        var reader = new FileReader();
+        reader.onload = function () {
+          textField.value = String(reader.result || '');
+          form.submit();
+        };
+        reader.onerror = function () {
+          if (btn) { btn.disabled = false; btn.textContent = 'Preview import'; }
+          alert('Could not read that file — try again.');
+        };
+        reader.readAsText(file);
+      });
+    })();
+  </script>
+</body>
+</html>

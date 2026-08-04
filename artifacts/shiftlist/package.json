@@ -9,6 +9,7 @@
     "build": "pnpm run gen:views && node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "pnpm run gen:views && tsc -p tsconfig.json --noEmit",
+    "test": "node ./scripts/test-parser.mjs",
     "cf:dev": "pnpm run gen:views && wrangler dev --var NODE_ENV:development",
     "cf:deploy": "pnpm run gen:views && wrangler deploy",
     "cf:tail": "wrangler tail"
