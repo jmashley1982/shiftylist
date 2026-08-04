@@ -43,21 +43,38 @@
         <% } %>
 
         <% if (preview.matched.length > 0) { %>
-          <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:14px; max-height:340px; overflow-y:auto;">
-            <% preview.matched.forEach(function(row) { %>
-              <div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border); font-size:0.88rem; flex-wrap:wrap;">
-                <span style="flex:1; min-width:100px;"><%= row.employeeName %></span>
-                <span style="color:var(--muted);"><%= formatDateDisplay(row.date) %></span>
-                <span class="shift-badge" style="font-size:0.72rem;"><%= row.shiftName %></span>
-                <span style="color:var(--muted); white-space:nowrap;"><%= row.startTime %><%= row.endTime ? '–' + row.endTime : '' %></span>
+          <p style="font-size:0.82rem; color:var(--muted); margin:0 0 10px;">
+            Everything below is checked by default. Uncheck anything that shouldn't be imported —
+            e.g. a block of people who all share the same time slot for a reason other than working
+            (a meeting, a training) — then import just the rest.
+          </p>
+
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px; max-height:420px; overflow-y:auto;">
+            <% preview.groups.forEach(function(g) { %>
+              <div class="preview-group" style="border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+                  <span style="color:var(--muted); font-size:0.85rem;"><%= formatDateDisplay(g.date) %></span>
+                  <span class="shift-badge" style="font-size:0.72rem;"><%= g.shiftName %></span>
+                  <span style="color:var(--muted); font-size:0.85rem; white-space:nowrap;"><%= g.startTime %><%= g.endTime ? '–' + g.endTime : '' %></span>
+                  <span style="font-size:0.78rem; color:var(--muted);"><%= g.rows.length %> <%= g.rows.length === 1 ? 'person' : 'people' %></span>
+                  <button type="button" class="btn btn-sm btn-ghost group-toggle" style="margin-left:auto; font-size:0.78rem;">Uncheck all</button>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  <% g.rows.forEach(function(r) { %>
+                    <label style="display:flex; align-items:center; gap:8px; font-size:0.87rem; cursor:pointer;">
+                      <input type="checkbox" class="preview-row-check" data-index="<%= r.index %>" checked>
+                      <%= r.employeeName %>
+                    </label>
+                  <% }); %>
+                </div>
               </div>
             <% }); %>
           </div>
 
-          <form method="POST" action="<%= adminUrl('/schedule/commit') %>">
+          <form method="POST" action="<%= adminUrl('/schedule/commit') %>" id="scheduleCommitForm">
             <input type="hidden" name="week" value="<%= weekStart %>">
-            <input type="hidden" name="matchedJson" value="<%= preview.matchedJson %>">
-            <button type="submit" class="btn btn-primary btn-full">Import <%= preview.matched.length %> shift<%= preview.matched.length === 1 ? '' : 's' %></button>
+            <input type="hidden" name="matchedJson" id="matchedJsonField" value="<%= preview.matchedJson %>">
+            <button type="submit" class="btn btn-primary btn-full">Import selected shifts</button>
           </form>
         <% } else { %>
           <p style="color:var(--muted); font-size:0.9rem; margin:0;">Nothing to import — fix the issues above and re-upload.</p>
@@ -152,6 +169,37 @@
 
   <script>
     (function () {
+      // ── Preview: group-level select/deselect + filter before commit ────────
+      document.querySelectorAll('.group-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var group = btn.closest('.preview-group');
+          if (!group) return;
+          var boxes = group.querySelectorAll('.preview-row-check');
+          var anyChecked = Array.from(boxes).some(function (b) { return b.checked; });
+          boxes.forEach(function (b) { b.checked = !anyChecked; });
+          btn.textContent = anyChecked ? 'Check all' : 'Uncheck all';
+        });
+      });
+
+      var commitForm = document.getElementById('scheduleCommitForm');
+      var matchedJsonField = document.getElementById('matchedJsonField');
+      if (commitForm && matchedJsonField) {
+        commitForm.addEventListener('submit', function (e) {
+          var full;
+          try { full = JSON.parse(matchedJsonField.value); } catch (err) { full = []; }
+          var checkedIndexes = Array.from(document.querySelectorAll('.preview-row-check:checked'))
+            .map(function (b) { return Number(b.dataset.index); });
+          var filtered = full.filter(function (_row, i) { return checkedIndexes.indexOf(i) !== -1; });
+          if (filtered.length === 0) {
+            e.preventDefault();
+            alert('Nothing selected to import.');
+            return;
+          }
+          matchedJsonField.value = JSON.stringify(filtered);
+        });
+      }
+
+      // ── Upload: read the CSV client-side, no server-side multipart needed ──
       var form = document.getElementById('scheduleUploadForm');
       var fileInput = document.getElementById('csvFileInput');
       var textField = document.getElementById('csvTextField');

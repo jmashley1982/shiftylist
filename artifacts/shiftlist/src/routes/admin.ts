@@ -769,12 +769,42 @@ router.post("/schedule/preview", async (req, res) => {
     issues.push({ reason: "Unreadable row", detail: `Row ${s.rowNumber}: ${s.reason}` });
   }
 
+  // Grouped by identical (date, shift, start, end) so a block of people all
+  // pulled in at the same slot — an all-staff meeting misread as a shift,
+  // say — can be deselected in one click instead of row by row. Nothing
+  // commits from this screen; the checkboxes just narrow what's in
+  // matchedJson before the browser submits it to /schedule/commit.
+  interface PreviewGroup {
+    date: string;
+    shiftName: string;
+    startTime: string;
+    endTime: string | null;
+    rows: { index: number; employeeName: string }[];
+  }
+  const groupMap = new Map<string, PreviewGroup>();
+  matched.forEach((row, index) => {
+    const gKey = `${row.date}|${row.shiftId}|${row.startTime}|${row.endTime ?? ""}`;
+    if (!groupMap.has(gKey)) {
+      groupMap.set(gKey, {
+        date: row.date,
+        shiftName: row.shiftName,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        rows: [],
+      });
+    }
+    groupMap.get(gKey)!.rows.push({ index, employeeName: row.employeeName });
+  });
+  const groups = [...groupMap.values()].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)
+  );
+
   const week = await loadScheduleWeek(weekStart);
 
   res.render("admin/schedule", {
     ...week,
     today: getBusinessDayStr(),
-    preview: { matched, issues, matchedJson: JSON.stringify(matched) },
+    preview: { matched, groups, issues, matchedJson: JSON.stringify(matched) },
     imported: null,
     importError: false,
     rulesSaved: false,
