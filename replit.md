@@ -114,6 +114,13 @@ These are load-bearing — changing them will break production:
 - DB setup: `artifacts/shiftlist/src/db/index.ts` (wraps `@workspace/db` pool)
 - DB schema: `lib/db/src/schema/index.ts` (Drizzle ORM)
 - Date helpers: `artifacts/shiftlist/src/utils/dateHelpers.ts`
+- Company Board: `artifacts/shiftlist/src/lib/companyBoard.ts` (schema bootstrap +
+  the one definition of how the board is grouped and sorted, shared by both
+  sides), `src/routes/companyAdmin.ts` (manager), the `/company` route in
+  `src/routes/staff.ts` (staff), and the `views/admin/company.ejs` /
+  `views/companyBoard.ejs` pair
+- Shared admin query helpers (`withTransaction`, `bulkRenormalizeOrder`):
+  `artifacts/shiftlist/src/lib/dbHelpers.ts`
 
 ## Architecture decisions
 
@@ -128,6 +135,16 @@ These are load-bearing — changing them will break production:
 - **Task checklist**: Tick off tasks with timestamps, add notes
 - **Incomplete task validation**: If not all tasks checked → modal asks to confirm and add a note
 - **Report submission**: Tasks + notes saved to the database with timestamps; visible in the admin reports page
+- **Company Board**: a second, company-wide to-do list, entirely separate from the
+  shift checklists — the months-long business goals management is working on.
+  Managers keep it at `/admin/shifts/company` (the **Goals** tab); every staff
+  member sees it read-only at `/staff/company` after logging in — once per
+  business day, before picking a shift, not at the start of every shift — and
+  can return to it any time from the task list. Each item has a
+  status (Not started / In progress / Done), an owner, an optional target date that
+  raises an **Overdue** badge when it passes, and dated progress notes that give
+  staff the running story. Items are grouped into manager-defined categories;
+  staff see in-progress work first and completed work rolled up.
 - **Admin panel**: Manage employees, view reports, and a single **Shifts** hub to build each shift's checklist:
   - **Standing list (always live)**: Each shift (Open/Mid/Close) has one checklist. Type a task and press Add — it's created (or reused) and instantly what staff see today. No publish step. Reorder/rename inline.
   - **Specific day (extra tasks)**: Pick a date to add extra tasks that appear only on that day, appended below the standing list.
@@ -159,6 +176,12 @@ These are load-bearing — changing them will break production:
   first, so edit the `.ejs` files, never the generated one.
 - The `sessions` table backs express-session. It is in the Drizzle schema, so
   `push-force` creates it; `scripts/post-merge.sh` also creates it idempotently.
+- The Company Board's four tables (`company_categories`, `company_goals`,
+  `company_goal_updates`, `company_board_views`) are in the Drizzle schema *and* created lazily by
+  `ensureCompanyTables()` on the first request that touches them — the same
+  belt-and-braces the schedule tables use, because `wrangler deploy` runs no
+  migration step against production. `lib/db/migrations/004_company_board.sql`
+  is the record of the schema, not the thing that applies it.
 - The `active_sessions` table was also created via raw SQL (Drizzle push prompts interactively for the unique constraint and fails in CI). `scripts/post-merge.sh` creates it idempotently after every task merge. If you re-provision the production DB, the post-merge script handles it automatically.
 
 ## Environment secrets required

@@ -345,10 +345,20 @@ textarea { resize: vertical; min-height: 80px; }
   padding-bottom: var(--safe-bottom);
   z-index: 100;
   box-shadow: 0 -4px 20px rgba(0,0,0,.3);
+  /* Eight tabs no longer fit a phone at a readable size, so the bar scrolls
+     sideways instead of crushing the labels. Scrollbar hidden — on a phone
+     it's a swipe, and on desktop this is a sidebar anyway (see the 900px
+     media query). */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 
+.admin-tab-nav::-webkit-scrollbar { display: none; }
+
 .admin-tab-link {
-  flex: 1;
+  flex: 1 0 auto;
+  min-width: 54px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1134,10 +1144,12 @@ tbody tr:hover { background: rgba(62,207,178,.04); }
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .admin-tab-link {
     flex: none;
+    min-width: 0;
     flex-direction: row;
     justify-content: flex-start;
     align-items: center;
@@ -1197,3 +1209,332 @@ tbody tr:hover { background: rgba(62,207,178,.04); }
   border-left: 3px solid var(--brand) !important;
   background: rgba(62,207,178,.06) !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COMPANY BOARD — the company-wide to-do list
+   Shared by the staff read-only view (companyBoard.ejs) and the manager
+   editor (admin/company.ejs), so the two never drift apart visually.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Headline progress ── */
+.board-summary {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 18px 16px;
+  margin-bottom: 22px;
+  box-shadow: var(--shadow-sm);
+}
+
+.board-summary-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.board-summary-pct {
+  font-family: var(--app-font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--brand);
+}
+
+.board-summary-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* Two stacked segments: solid = done, hatched = in flight. Scoped to the
+   board so the single-segment bar on the shift checklist is untouched. */
+.board-progress {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.board-progress > div {
+  flex: 0 0 auto;
+}
+
+.progress-bar-pending {
+  height: 100%;
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(62,207,178,.42),
+    rgba(62,207,178,.42) 4px,
+    rgba(62,207,178,.16) 4px,
+    rgba(62,207,178,.16) 8px
+  );
+  transition: width 0.4s ease;
+}
+
+.board-summary-counts {
+  font-size: 0.8rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.board-summary-counts strong { color: var(--text-mid); }
+.board-count-sep { color: var(--border-strong); }
+
+/* ── Category sections ── */
+.board-category { margin-bottom: 26px; }
+
+.board-category-name {
+  font-family: var(--app-font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── One goal ── */
+.goal-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 15px;
+  margin-bottom: 10px;
+}
+
+/* In-progress work gets the accent rail — same signal the shift list uses
+   for today-only tasks. */
+.goal-card-active {
+  border-left: 3px solid var(--brand);
+  background: rgba(62,207,178,.05);
+}
+
+.goal-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.goal-status {
+  display: inline-block;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 4px 9px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.goal-status-in_progress { background: rgba(62,207,178,.14);  color: var(--brand);   border: 1px solid rgba(62,207,178,.32); }
+.goal-status-not_started { background: rgba(138,138,168,.12); color: var(--muted);   border: 1px solid var(--border); }
+.goal-status-done        { background: rgba(62,207,178,.10);  color: var(--brand-dark); border: 1px solid rgba(62,207,178,.22); }
+.goal-status-overdue     { background: rgba(245,158,11,.14);  color: var(--warning); border: 1px solid rgba(245,158,11,.32); }
+
+.goal-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+
+.goal-detail {
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-mid);
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+}
+
+.goal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.goal-meta strong { color: var(--text-mid); font-weight: 700; }
+
+/* ── Progress notes ── */
+.goal-updates {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.goal-update {
+  display: flex;
+  gap: 9px;
+  font-size: 0.81rem;
+  line-height: 1.5;
+}
+
+.goal-update-date {
+  flex: 0 0 auto;
+  font-family: var(--app-font-sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--brand);
+  padding-top: 1px;
+  min-width: 46px;
+}
+
+.goal-update-note {
+  color: var(--text-mid);
+  white-space: pre-wrap;
+}
+
+.goal-update-more > summary,
+.goal-done-group > summary {
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--muted);
+  list-style: none;
+  padding: 4px 0;
+}
+
+.goal-update-more > summary::before,
+.goal-done-group > summary::before {
+  content: "▸ ";
+  color: var(--muted-light);
+}
+
+.goal-update-more[open] > summary::before,
+.goal-done-group[open] > summary::before { content: "▾ "; }
+
+.goal-update-more > summary::-webkit-details-marker,
+.goal-done-group > summary::-webkit-details-marker { display: none; }
+
+.goal-update-more {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Completed roll-up ── */
+.goal-done-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 13px;
+  background: rgba(255,255,255,.015);
+}
+
+.goal-done-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 0.84rem;
+  border-top: 1px solid var(--border);
+}
+
+.goal-done-check { color: var(--brand); font-weight: 800; }
+.goal-done-title { flex: 1; color: var(--text-mid); }
+
+.goal-done-date {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── Manager editor only ── */
+.goal-edit-field {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.goal-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.goal-edit-row > * { flex: 1 1 140px; }
+
+.status-picker {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.status-picker button {
+  flex: 1;
+  padding: 7px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg);
+  color: var(--muted);
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  min-height: 36px;
+}
+
+.status-picker button:last-child { border-right: none; }
+.status-picker button[aria-pressed="true"] { background: rgba(62,207,178,.16); color: var(--brand); }
+
+.goal-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.goal-tool-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 6px 9px;
+  cursor: pointer;
+  min-height: 30px;
+}
+
+.goal-tool-btn:hover { color: var(--text); border-color: var(--border-strong); }
+.goal-tool-btn[disabled] { opacity: .3; cursor: default; }
+.goal-tool-danger:hover { color: var(--danger); border-color: var(--danger); }
+
+.board-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(76px + var(--safe-bottom));
+  transform: translateX(-50%) translateY(12px);
+  background: var(--card);
+  border: 1px solid var(--brand);
+  color: var(--brand);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 9px 18px;
+  border-radius: 99px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 200;
+}
+
+.board-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.board-toast.error { border-color: var(--danger); color: var(--danger); }

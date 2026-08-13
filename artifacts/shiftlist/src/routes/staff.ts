@@ -5,8 +5,41 @@ import { getBusinessDayStr } from "../utils/dateHelpers.js";
 import { logger } from "../lib/logger.js";
 import { staffUrl } from "../lib/urls.js";
 import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
+import { loadBoard, recordBoardView, STATUS_LABELS } from "../lib/companyBoard.js";
+import { formatDateMaybeYear, formatLocalDate } from "../utils/dateHelpers.js";
 
 const router = Router();
+
+/**
+ * The Company Board, read-only. Deliberately guarded by ensureStaffAuth alone
+ * — that only requires an employeeId, so this is reachable straight after
+ * login, before a shift has been picked. That's where staff first land (see
+ * POST /confirm-name in routes/auth.ts).
+ */
+router.get("/company", ensureStaffAuth, async (req, res) => {
+  const board = await loadBoard();
+
+  // Awaited, not fire-and-forget: on Workers the request's connection pool is
+  // closed the moment the response ends, which would kill a floating write.
+  try {
+    await recordBoardView(req.session.employeeId!);
+  } catch (err) {
+    // Worst case they are shown the board again at their next login.
+    logger.error({ err }, "Failed to record a company board view");
+  }
+
+  res.render("companyBoard", {
+    board,
+    employeeName: req.session.employeeName,
+    statusLabels: STATUS_LABELS,
+    // Set when arriving from login, so the page offers "Continue to my shift"
+    // instead of a link back to a task list they haven't opened yet.
+    nextIsShift: req.query["next"] === "shift",
+    hasShift: Boolean(req.session.selectedShiftId),
+    formatDateMaybeYear,
+    formatLocalDate,
+  });
+});
 
 router.get("/tasks", ensureStaffAuth, async (req, res) => {
   sweepStaleSessionsOnRequest();

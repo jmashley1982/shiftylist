@@ -12,6 +12,7 @@ import {
   getWeekStartStr,
 } from "../utils/dateHelpers.js";
 import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
+import { withTransaction, bulkRenormalizeOrder } from "../lib/dbHelpers.js";
 import { ensureScheduleTables, DEFAULT_TIME_RULES } from "../lib/scheduleTables.js";
 import {
   parseHomebaseCsv,
@@ -32,22 +33,6 @@ const router = Router();
 router.use(ensureAdminAuth);
 
 // ════════════════════════════════════ Helpers ═══════════════════════════════════
-/** Run fn inside a BEGIN/COMMIT transaction; rolls back on error. */
-async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const result = await fn(client);
-    await client.query("COMMIT");
-    return result;
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
 /** Create the task by name if new, otherwise reuse the existing one. Returns its id. */
 async function upsertTaskByName(client: PoolClient, name: string): Promise<number> {
   const res = await client.query(
@@ -63,27 +48,6 @@ async function upsertTaskByName(client: PoolClient, name: string): Promise<numbe
 function hubUrl(shiftId: number | string, extraDate?: string): string {
   const base = `${adminUrl("/build")}?shift=${shiftId}`;
   return extraDate ? `${base}&extraDate=${extraDate}` : base;
-}
-
-/**
- * Renormalize a list of task rows to display_order 0, 1, 2, … in a single
- * UPDATE … FROM (VALUES …) statement.
- */
-async function bulkRenormalizeOrder(
-  client: PoolClient,
-  table: "shift_tasks" | "extra_day_tasks",
-  ids: number[]
-): Promise<void> {
-  if (ids.length === 0) return;
-  const valuePlaceholders = ids.map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`).join(", ");
-  const params: number[] = ids.flatMap((id, i) => [id, i]);
-  await client.query(
-    `UPDATE ${table} AS t
-     SET display_order = vals.new_order
-     FROM (VALUES ${valuePlaceholders}) AS vals(row_id, new_order)
-     WHERE t.id = vals.row_id`,
-    params
-  );
 }
 
 // ════════════════════════════════════ Dashboard ═════════════════════════════════

@@ -19,6 +19,10 @@
     <span class="tab-icon">📋</span>
     <span>Shifts</span>
   </a>
+  <a href="<%= adminUrl('/company') %>" class="admin-tab-link <%= active === 'company' ? 'active' : '' %>">
+    <span class="tab-icon">🎯</span>
+    <span>Goals</span>
+  </a>
   <a href="<%= adminUrl('/live') %>" class="admin-tab-link <%= active === 'live' ? 'active' : '' %>">
     <span class="tab-icon">🟢</span>
     <span>Live</span>
@@ -36,3 +40,16 @@
     <span>Notice</span>
   </a>
 </nav>
+
+<script>
+  // Eight tabs no longer fit a phone, so the bar scrolls sideways (see
+  // .admin-tab-nav in style.css). Pull the current tab into view so you can
+  // always see where you are, whichever end of the bar it sits at. No-op on
+  // desktop, where the bar is a vertical sidebar that fits everything.
+  (function () {
+    var current = document.querySelector('.admin-tab-link.active');
+    if (current && current.scrollIntoView) {
+      current.scrollIntoView({ inline: 'center', block: 'nearest' });
+    }
+  })();
+</script>
