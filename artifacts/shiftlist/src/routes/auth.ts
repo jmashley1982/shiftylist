@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
 import { staffUrl } from "../lib/urls.js";
+import { logger } from "../lib/logger.js";
+import { boardHasGoals } from "../lib/companyBoard.js";
 
 const router = Router();
 
@@ -32,18 +34,32 @@ router.get("/confirm-name", (req, res) => {
   res.render("confirmName", { employee: req.session.pendingEmployee });
 });
 
-router.post("/confirm-name", (req, res) => {
+router.post("/confirm-name", async (req, res) => {
   const { confirm } = req.body as { confirm: string };
-  if (confirm === "yes") {
-    const emp = req.session.pendingEmployee!;
-    req.session.employeeId = emp.id;
-    req.session.employeeName = emp.name;
-    req.session.employeeCode = emp.code;
+  if (confirm !== "yes") {
     delete req.session.pendingEmployee;
-    return void res.redirect(staffUrl("/select-shift"));
+    return void res.redirect(staffUrl());
   }
+
+  const emp = req.session.pendingEmployee!;
+  req.session.employeeId = emp.id;
+  req.session.employeeName = emp.name;
+  req.session.employeeCode = emp.code;
   delete req.session.pendingEmployee;
-  res.redirect(staffUrl());
+
+  // Every shift starts with the company-wide to-do list, so staff see where
+  // the business is before getting on with their own tasks — but only when
+  // there's something on it. An empty board would just be a dead click
+  // between login and shift select.
+  let showBoard = false;
+  try {
+    showBoard = await boardHasGoals();
+  } catch (err) {
+    // Never let the board block someone from starting their shift.
+    logger.error({ err }, "Failed to check the company board — skipping it");
+  }
+
+  res.redirect(showBoard ? staffUrl("/company?next=shift") : staffUrl("/select-shift"));
 });
 
 router.get("/select-shift", async (req, res) => {

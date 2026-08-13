@@ -148,6 +148,57 @@ export const scheduledShifts = pgTable("scheduled_shifts", {
 export type ScheduledShift = typeof scheduledShifts.$inferSelect;
 export type InsertScheduledShift = typeof scheduledShifts.$inferInsert;
 
+// ── Company Board ───────────────────────────────────────────────────────────
+// A single company-wide to-do list, separate from the per-shift checklists
+// above: months-long business goals owned by management, read-only to staff.
+// Created lazily at request time too — see
+// artifacts/shiftlist/src/lib/companyBoard.ts.
+
+// Themes a goal is filed under (Store, Online, Hiring, …). Manager-ordered.
+export const companyCategories = pgTable("company_categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  displayOrder: integer("display_order").default(0).notNull(),
+});
+
+export type CompanyCategory = typeof companyCategories.$inferSelect;
+export type InsertCompanyCategory = typeof companyCategories.$inferInsert;
+
+// One item on the company-wide list. `categoryId` is nullable so a goal can
+// be added before anyone has bothered to create a category — those render
+// under a synthetic "General" heading.
+export const companyGoals = pgTable("company_goals", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id").references(() => companyCategories.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  detail: text("detail").notNull().default(""),
+  status: text("status").notNull().default("not_started"), // not_started | in_progress | done
+  owner: text("owner").notNull().default(""),
+  targetDate: text("target_date"), // 'YYYY-MM-DD', optional
+  displayOrder: integer("display_order").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+export type CompanyGoal = typeof companyGoals.$inferSelect;
+export type InsertCompanyGoal = typeof companyGoals.$inferInsert;
+
+// Dated progress notes appended to a goal — the "here's what's happening
+// behind the scenes" history staff read.
+export const companyGoalUpdates = pgTable("company_goal_updates", {
+  id: serial("id").primaryKey(),
+  goalId: integer("goal_id").notNull().references(() => companyGoals.id, { onDelete: "cascade" }),
+  note: text("note").notNull(),
+  author: text("author").notNull().default("Management"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("company_goal_updates_goal_idx").on(table.goalId, table.createdAt),
+]);
+
+export type CompanyGoalUpdate = typeof companyGoalUpdates.$inferSelect;
+export type InsertCompanyGoalUpdate = typeof companyGoalUpdates.$inferInsert;
+
 // Maps a shift's start time range to one of this store's shift types, used
 // to classify imported Homebase rows into Open/Mid/Close (etc).
 export const shiftTimeRules = pgTable("shift_time_rules", {

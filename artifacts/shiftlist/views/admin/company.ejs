@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Company Goals</title>
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
+</head>
+<body>
+  <%- include('../partials/admin-nav', { active: 'company' }) %>
+  <div class="main-content">
+
+    <div class="page-header" style="margin-top:12px;">
+      <h1>Company Goals</h1>
+      <p>
+        The company-wide to-do list. Every staff member sees this — read-only — when they log in,
+        so keep the progress notes current.
+      </p>
+    </div>
+
+    <% if (board.totals.total > 0) { %>
+      <div class="board-summary">
+        <div class="board-summary-figure">
+          <span class="board-summary-pct"><%= board.totals.donePct %>%</span>
+          <span class="board-summary-label">of the list complete</span>
+        </div>
+        <div class="progress-bar-wrap board-progress">
+          <div class="progress-bar-fill" style="width:<%= board.totals.donePct %>%"></div>
+          <div class="progress-bar-pending" style="width:<%= board.totals.inProgressPct %>%"></div>
+        </div>
+        <div class="board-summary-counts">
+          <span><strong><%= board.totals.done %></strong> done</span>
+          <span class="board-count-sep">·</span>
+          <span><strong><%= board.totals.inProgress %></strong> in progress</span>
+          <span class="board-count-sep">·</span>
+          <span><strong><%= board.totals.notStarted %></strong> to do</span>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- ── Add an item ── -->
+    <form method="POST" action="<%= adminUrl('/company/add') %>">
+      <div class="panel">
+        <div class="panel-header">Add an item</div>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+
+          <input type="text" name="title" required maxlength="160" class="goal-edit-field"
+            placeholder="What are we doing? e.g. Launch the online store"
+            style="font-weight:700;">
+
+          <textarea name="detail" rows="2" maxlength="1000" class="goal-edit-field"
+            placeholder="Why it matters, or what it involves (optional)"
+            style="resize:vertical; line-height:1.5;"></textarea>
+
+          <div class="goal-edit-row" style="margin-top:0;">
+            <select name="categoryId" class="goal-edit-field">
+              <option value="">— <%= uncategorizedName %> —</option>
+              <% categories.forEach(function (c) { %>
+                <option value="<%= c.id %>"><%= c.name %></option>
+              <% }); %>
+            </select>
+            <input type="text" name="newCategory" maxlength="60" class="goal-edit-field"
+              placeholder="…or a new category">
+          </div>
+
+          <div class="goal-edit-row" style="margin-top:0;">
+            <input type="text" name="owner" maxlength="80" class="goal-edit-field"
+              placeholder="Who owns it? e.g. Josh">
+            <input type="date" name="targetDate" class="goal-edit-field">
+          </div>
+
+          <button type="submit" class="btn btn-primary">Add to the list</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- ── The board ── -->
+    <% if (board.totals.total === 0 && categories.length === 0) { %>
+
+      <div class="panel" style="text-align:center; padding:30px 20px;">
+        <div style="font-size:2.2rem; margin-bottom:10px;">🎯</div>
+        <p style="color:var(--muted); font-size:0.88rem;">
+          Nothing here yet. Add the first item above — staff won't see the board until it has something on it.
+        </p>
+      </div>
+
+    <% } %>
+
+    <% board.categories.forEach(function (category) { %>
+      <section class="board-category" data-category="<%= category.id === null ? '' : category.id %>">
+        <h2 class="board-category-name" style="display:flex; align-items:center; gap:8px;">
+          <% if (category.id === null) { %>
+            <%# The synthetic "General" group has no row to rename. %>
+            <span style="flex:1;"><%= category.name %></span>
+          <% } else { %>
+            <span class="cat-name" contenteditable="true" spellcheck="false"
+              data-cat-id="<%= category.id %>"
+              style="flex:1; outline:none;"><%= category.name %></span>
+          <% } %>
+          <% if (category.id !== null) { %>
+            <form method="POST" action="<%= adminUrl('/company/categories/' + category.id + '/delete') %>"
+              style="display:inline;"
+              onsubmit="return confirm('Delete this category? Its items are kept and move to <%= uncategorizedName %>.')">
+              <button type="submit" class="goal-tool-btn goal-tool-danger" title="Delete category">✕</button>
+            </form>
+          <% } %>
+        </h2>
+
+        <% if (category.goals.length === 0) { %>
+          <p style="font-size:0.82rem; color:var(--muted); padding:4px 0 8px;">No items in this category yet.</p>
+        <% } %>
+
+        <% category.goals.forEach(function (goal, idx) { %>
+          <article class="goal-card<%= goal.status === 'in_progress' ? ' goal-card-active' : '' %>"
+            id="goal-<%= goal.id %>" data-goal-id="<%= goal.id %>">
+
+            <div class="goal-card-head" style="align-items:center;">
+              <div class="status-picker" style="flex:1 1 210px;">
+                <% ['not_started', 'in_progress', 'done'].forEach(function (s) { %>
+                  <button type="button" data-status="<%= s %>"
+                    aria-pressed="<%= goal.status === s ? 'true' : 'false' %>"
+                    onclick="setStatus(<%= goal.id %>, '<%= s %>', this)"><%= statusLabels[s] %></button>
+                <% }); %>
+              </div>
+              <div class="goal-tools">
+                <button type="button" class="goal-tool-btn" title="Move up"
+                  onclick="moveGoal(<%= goal.id %>, -1)" <%= idx === 0 ? 'disabled' : '' %>>▲</button>
+                <button type="button" class="goal-tool-btn" title="Move down"
+                  onclick="moveGoal(<%= goal.id %>, 1)" <%= idx === category.goals.length - 1 ? 'disabled' : '' %>>▼</button>
+                <form method="POST" action="<%= adminUrl('/company/' + goal.id + '/delete') %>" style="display:inline;"
+                  onsubmit="return confirm('Delete this item and its progress notes?')">
+                  <button type="submit" class="goal-tool-btn goal-tool-danger" title="Delete item">🗑</button>
+                </form>
+              </div>
+            </div>
+
+            <% if (goal.overdue) { %>
+              <div style="margin-bottom:8px;">
+                <span class="goal-status goal-status-overdue">Overdue — target was <%= formatDateMaybeYear(goal.targetDate) %></span>
+              </div>
+            <% } %>
+
+            <input type="text" class="goal-edit-field goal-field-title" value="<%= goal.title %>"
+              maxlength="160" style="font-weight:700; font-size:0.95rem; margin-bottom:8px;">
+
+            <textarea class="goal-edit-field goal-field-detail" rows="2" maxlength="1000"
+              placeholder="Details (optional)"
+              style="resize:vertical; line-height:1.5;"><%= goal.detail %></textarea>
+
+            <div class="goal-edit-row">
+              <input type="text" class="goal-edit-field goal-field-owner" value="<%= goal.owner %>"
+                maxlength="80" placeholder="Owner">
+              <input type="date" class="goal-edit-field goal-field-target"
+                value="<%= goal.targetDate || '' %>">
+              <select class="goal-edit-field goal-field-category">
+                <option value="">— <%= uncategorizedName %> —</option>
+                <% categories.forEach(function (c) { %>
+                  <option value="<%= c.id %>" <%= goal.categoryId === c.id ? 'selected' : '' %>><%= c.name %></option>
+                <% }); %>
+              </select>
+            </div>
+
+            <div style="margin-top:9px;">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="saveGoal(<%= goal.id %>)">Save changes</button>
+              <% if (goal.status === 'done' && goal.completedAt) { %>
+                <span style="font-size:0.76rem; color:var(--muted); margin-left:8px;">
+                  Completed <%= formatLocalDate(goal.completedAt) %>
+                </span>
+              <% } %>
+            </div>
+
+            <!-- Progress notes -->
+            <div class="goal-updates">
+              <% if (goal.updates.length === 0) { %>
+                <p style="font-size:0.78rem; color:var(--muted);">No progress notes yet — staff see these as the story of what's happening.</p>
+              <% } %>
+              <% goal.updates.forEach(function (update) { %>
+                <div class="goal-update">
+                  <span class="goal-update-date"><%= formatLocalDate(update.createdAt) %></span>
+                  <span class="goal-update-note"><%= update.note %></span>
+                  <form method="POST" action="<%= adminUrl('/company/notes/' + update.id + '/delete') %>"
+                    style="margin-left:auto;" onsubmit="return confirm('Delete this progress note?')">
+                    <button type="submit" class="goal-tool-btn goal-tool-danger" title="Delete note"
+                      style="padding:2px 7px; min-height:24px; font-size:0.7rem;">✕</button>
+                  </form>
+                </div>
+              <% }); %>
+
+              <form method="POST" action="<%= adminUrl('/company/' + goal.id + '/notes') %>"
+                style="display:flex; gap:8px; margin-top:4px;">
+                <input type="text" name="note" required maxlength="500" class="goal-edit-field"
+                  placeholder="Add a progress update…" style="flex:1;">
+                <button type="submit" class="btn btn-ghost btn-sm">Post</button>
+              </form>
+            </div>
+          </article>
+        <% }); %>
+      </section>
+    <% }); %>
+
+    <!-- ── Categories ── -->
+    <details class="panel" style="margin-top:8px;">
+      <summary style="cursor:pointer; font-size:0.85rem; font-weight:700; color:var(--text-mid);">
+        Manage categories
+      </summary>
+      <p style="font-size:0.8rem; color:var(--muted); margin:10px 0 12px; line-height:1.5;">
+        Click a category heading above to rename it. Deleting a category keeps its items —
+        they move to <%= uncategorizedName %>.
+      </p>
+      <form method="POST" action="<%= adminUrl('/company/categories/add') %>" style="display:flex; gap:8px;">
+        <input type="text" name="name" required maxlength="60" class="goal-edit-field"
+          placeholder="New category, e.g. Hiring" style="flex:1;">
+        <button type="submit" class="btn btn-ghost btn-sm">Add</button>
+      </form>
+      <% if (categories.length > 0) { %>
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+          <% categories.forEach(function (c, i) { %>
+            <div style="display:flex; align-items:center; gap:8px; font-size:0.84rem; color:var(--text-mid);">
+              <span style="flex:1;"><%= c.name %> <span style="color:var(--muted);">(<%= c.goal_count %>)</span></span>
+              <button type="button" class="goal-tool-btn" onclick="moveCategory(<%= c.id %>, -1)"
+                <%= i === 0 ? 'disabled' : '' %> title="Move up">▲</button>
+              <button type="button" class="goal-tool-btn" onclick="moveCategory(<%= c.id %>, 1)"
+                <%= i === categories.length - 1 ? 'disabled' : '' %> title="Move down">▼</button>
+            </div>
+          <% }); %>
+        </div>
+      <% } %>
+    </details>
+
+    <div style="height:90px;"></div>
+  </div>
+
+  <div class="board-toast" id="toast"></div>
+
+  <script>
+    var COMPANY_BASE = <%- JSON.stringify(adminUrl('/company')) %>;
+
+    // The order the manager sees, per category — what the ▲/▼ buttons permute.
+    var GOAL_ORDER = <%- JSON.stringify(board.categories.map(function (c) {
+      return c.goals.map(function (g) { return g.id; });
+    })) %>;
+    var CATEGORY_ORDER = <%- JSON.stringify(categories.map(function (c) { return c.id; })) %>;
+
+    var toastEl = document.getElementById('toast');
+    var toastTimer = null;
+
+    function toast(message, isError) {
+      toastEl.textContent = message;
+      toastEl.className = 'board-toast show' + (isError ? ' error' : '');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { toastEl.className = 'board-toast'; }, 2200);
+    }
+
+    /**
+     * A dead session redirects to the login HTML with a 200, so "did this
+     * work?" can't be answered by the status code alone — the same check the
+     * staff checklist makes. Anything that IS JSON is a real answer from the
+     * route, including its 400s, so the message it carries is shown rather
+     * than replaced with a generic failure.
+     */
+    function postJson(path, body) {
+      return fetch(COMPANY_BASE + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(function (res) {
+        var type = res.headers.get('content-type') || '';
+        if (type.indexOf('application/json') === -1) {
+          throw new Error('Request failed — your session may have expired. Reload the page.');
+        }
+        return res.json();
+      }).then(function (data) {
+        if (!data.ok) throw new Error(data.error || 'Save failed');
+        return data;
+      });
+    }
+
+    function setStatus(id, status, button) {
+      var picker = button.parentNode;
+      var previous = picker.querySelector('[aria-pressed="true"]');
+      // Optimistic, like the staff checklist — roll back if the write fails.
+      if (previous) previous.setAttribute('aria-pressed', 'false');
+      button.setAttribute('aria-pressed', 'true');
+
+      var card = document.getElementById('goal-' + id);
+      card.classList.toggle('goal-card-active', status === 'in_progress');
+
+      postJson('/' + id + '/status', { status: status })
+        .then(function () { toast('Status updated'); })
+        .catch(function (err) {
+          button.setAttribute('aria-pressed', 'false');
+          if (previous) previous.setAttribute('aria-pressed', 'true');
+          toast(err.message, true);
+        });
+    }
+
+    function saveGoal(id) {
+      var card = document.getElementById('goal-' + id);
+      var title = card.querySelector('.goal-field-title').value.trim();
+      if (!title) return void toast('An item needs a title', true);
+
+      postJson('/' + id + '/edit', {
+        title: title,
+        detail: card.querySelector('.goal-field-detail').value,
+        owner: card.querySelector('.goal-field-owner').value,
+        targetDate: card.querySelector('.goal-field-target').value,
+        categoryId: card.querySelector('.goal-field-category').value
+      }).then(function () {
+        // A changed category or target date moves the card, so reload rather
+        // than leaving the page showing something the board no longer says.
+        window.location.reload();
+      }).catch(function (err) { toast(err.message, true); });
+    }
+
+    function swap(list, index, delta) {
+      var target = index + delta;
+      if (index < 0 || target < 0 || target >= list.length) return null;
+      var next = list.slice();
+      next[index] = list[target];
+      next[target] = list[index];
+      return next;
+    }
+
+    function moveGoal(id, delta) {
+      for (var i = 0; i < GOAL_ORDER.length; i++) {
+        var index = GOAL_ORDER[i].indexOf(id);
+        if (index === -1) continue;
+
+        var reordered = swap(GOAL_ORDER[i], index, delta);
+        if (!reordered) return;
+
+        postJson('/reorder', { ids: reordered })
+          .then(function () { window.location.reload(); })
+          .catch(function (err) { toast(err.message, true); });
+        return;
+      }
+    }
+
+    function moveCategory(id, delta) {
+      var reordered = swap(CATEGORY_ORDER, CATEGORY_ORDER.indexOf(id), delta);
+      if (!reordered) return;
+
+      postJson('/categories/reorder', { ids: reordered })
+        .then(function () { window.location.reload(); })
+        .catch(function (err) { toast(err.message, true); });
+    }
+
+    // Rename a category by editing its heading in place.
+    Array.prototype.forEach.call(document.querySelectorAll('.cat-name[contenteditable]'), function (el) {
+      var original = el.textContent.trim();
+
+      el.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') { event.preventDefault(); el.blur(); }
+        if (event.key === 'Escape') { el.textContent = original; el.blur(); }
+      });
+
+      el.addEventListener('blur', function () {
+        var name = el.textContent.trim();
+        if (name === original) return;
+        if (!name) { el.textContent = original; return; }
+
+        postJson('/categories/' + el.dataset.catId + '/rename', { name: name })
+          .then(function () { original = name; toast('Category renamed'); })
+          .catch(function (err) { el.textContent = original; toast(err.message, true); });
+      });
+    });
+  </script>
+</body>
+</html>

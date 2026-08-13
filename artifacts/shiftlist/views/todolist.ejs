@@ -22,6 +22,10 @@
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; margin-top:8px;">
       <div>
         <h1 style="font-size:1.2rem;">Today's Tasks</h1>
+        <!-- Staff see the company board once at login; this is how they get
+             back to it mid-shift. Kept out of the navbar, which has no room
+             left for it at phone width. -->
+        <a href="<%= staffUrl('/company') %>" style="font-size:0.75rem; font-weight:700; color:var(--brand); text-decoration:none;">🎯 Company Board</a>
       </div>
       <span class="shift-badge"><%= shift %></span>
     </div>

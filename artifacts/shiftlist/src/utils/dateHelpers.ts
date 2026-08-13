@@ -76,6 +76,18 @@ export function formatDateFull(dateStr: string): string {
 }
 
 /**
+ * Like formatDateDisplay, but keeps the year when it isn't the current one.
+ * Everything else in this app is dated within a day or two of now, so a bare
+ * "Thu, Jan 15" reads unambiguously; Company Board targets run months or
+ * years out, where it does not.
+ */
+export function formatDateMaybeYear(dateStr: string): string {
+  return dateStr.slice(0, 4) === getTodayStr().slice(0, 4)
+    ? formatDateDisplay(dateStr)
+    : formatDateFull(dateStr);
+}
+
+/**
  * Format a UTC timestamp as a human-readable time in the store's local timezone.
  * Use this anywhere a timestamp from the database needs to be shown to staff/admin.
  */
@@ -100,4 +112,23 @@ export function formatLocalTime(date: Date | string): string {
     minute: "2-digit",
     hour12: true,
   }).format(new Date(date));
+}
+
+/**
+ * Format a timestamp as a short date ("Aug 13") in the store's timezone —
+ * for things dated in days rather than minutes, like Company Board progress
+ * notes. Falls back to including the year when it isn't the current one.
+ */
+export function formatLocalDate(date: Date | string): string {
+  const d = new Date(date);
+  const thisYear = new Intl.DateTimeFormat("en-US", { timeZone: tz(), year: "numeric" }).format(
+    new Date()
+  );
+  const year = new Intl.DateTimeFormat("en-US", { timeZone: tz(), year: "numeric" }).format(d);
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: tz(),
+    month: "short",
+    day: "numeric",
+    ...(year === thisYear ? {} : { year: "numeric" }),
+  }).format(d);
 }

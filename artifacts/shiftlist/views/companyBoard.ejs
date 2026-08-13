@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Company Board</title>
+  <link rel="stylesheet" href="<%= staffUrl('/style.css') %>">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="<%= staffUrl('/company') %>" class="brand">
+      <img src="<%= staffUrl('/vvas-logo.png') %>" alt="VVAS">
+      <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList" class="brand-platform-logo">
+    </a>
+    <div class="navbar-right">
+      <span class="navbar-user"><%= employeeName %></span>
+      <a href="<%= staffUrl('/logout') %>" class="btn btn-ghost btn-sm" style="min-height:36px;padding:7px 12px;">Out</a>
+    </div>
+  </nav>
+
+  <div class="main-content-notabs">
+
+    <div style="margin-top:8px; margin-bottom:14px;">
+      <h1 style="font-size:1.2rem; margin-bottom:4px;">Where we're at as a company</h1>
+      <p style="font-size:0.82rem; color:var(--muted); line-height:1.5;">
+        What management is working on behind the scenes, and how far along each piece is.
+      </p>
+    </div>
+
+    <% if (board.totals.total === 0) { %>
+
+      <div class="panel" style="text-align:center; padding:32px 20px;">
+        <div style="font-size:2.4rem; margin-bottom:10px;">🎯</div>
+        <p style="color:var(--muted); font-size:0.88rem;">Nothing on the company list yet — check back soon.</p>
+      </div>
+
+    <% } else { %>
+
+      <div class="board-summary">
+        <div class="board-summary-figure">
+          <span class="board-summary-pct"><%= board.totals.donePct %>%</span>
+          <span class="board-summary-label">of the list complete</span>
+        </div>
+        <div class="progress-bar-wrap board-progress">
+          <div class="progress-bar-fill" style="width:<%= board.totals.donePct %>%"></div>
+          <div class="progress-bar-pending" style="width:<%= board.totals.inProgressPct %>%"></div>
+        </div>
+        <div class="board-summary-counts">
+          <span><strong><%= board.totals.done %></strong> done</span>
+          <span class="board-count-sep">·</span>
+          <span><strong><%= board.totals.inProgress %></strong> in progress</span>
+          <span class="board-count-sep">·</span>
+          <span><strong><%= board.totals.notStarted %></strong> to do</span>
+        </div>
+      </div>
+
+      <% board.categories.forEach(function (category) { %>
+        <% if (category.goals.length === 0) return; %>
+        <%
+          var openGoals = category.goals.filter(function (g) { return g.status !== 'done'; });
+          var doneGoals = category.goals.filter(function (g) { return g.status === 'done'; });
+        %>
+
+        <section class="board-category">
+          <h2 class="board-category-name"><%= category.name %></h2>
+
+          <% openGoals.forEach(function (goal) { %>
+            <article class="goal-card<%= goal.status === 'in_progress' ? ' goal-card-active' : '' %>">
+              <div class="goal-card-head">
+                <span class="goal-status goal-status-<%= goal.status %>"><%= statusLabels[goal.status] %></span>
+                <% if (goal.overdue) { %>
+                  <span class="goal-status goal-status-overdue">Overdue</span>
+                <% } %>
+              </div>
+
+              <h3 class="goal-title"><%= goal.title %></h3>
+              <% if (goal.detail) { %>
+                <p class="goal-detail"><%= goal.detail %></p>
+              <% } %>
+
+              <% if (goal.owner || goal.targetDate) { %>
+                <div class="goal-meta">
+                  <% if (goal.owner) { %><span>Led by <strong><%= goal.owner %></strong></span><% } %>
+                  <% if (goal.owner && goal.targetDate) { %><span class="board-count-sep">·</span><% } %>
+                  <% if (goal.targetDate) { %><span>Target <strong><%= formatDateMaybeYear(goal.targetDate) %></strong></span><% } %>
+                </div>
+              <% } %>
+
+              <% if (goal.updates.length > 0) { %>
+                <div class="goal-updates">
+                  <% goal.updates.slice(0, 2).forEach(function (update) { %>
+                    <div class="goal-update">
+                      <span class="goal-update-date"><%= formatLocalDate(update.createdAt) %></span>
+                      <span class="goal-update-note"><%= update.note %></span>
+                    </div>
+                  <% }); %>
+
+                  <% if (goal.updates.length > 2) { %>
+                    <details class="goal-update-more">
+                      <summary><%= goal.updates.length - 2 %> earlier update<%= goal.updates.length - 2 === 1 ? '' : 's' %></summary>
+                      <% goal.updates.slice(2).forEach(function (update) { %>
+                        <div class="goal-update">
+                          <span class="goal-update-date"><%= formatLocalDate(update.createdAt) %></span>
+                          <span class="goal-update-note"><%= update.note %></span>
+                        </div>
+                      <% }); %>
+                    </details>
+                  <% } %>
+                </div>
+              <% } %>
+            </article>
+          <% }); %>
+
+          <% if (doneGoals.length > 0) { %>
+            <details class="goal-done-group">
+              <summary><%= doneGoals.length %> completed in <%= category.name %></summary>
+              <% doneGoals.forEach(function (goal) { %>
+                <div class="goal-done-item">
+                  <span class="goal-done-check">✓</span>
+                  <span class="goal-done-title"><%= goal.title %></span>
+                  <% if (goal.completedAt) { %>
+                    <span class="goal-done-date"><%= formatLocalDate(goal.completedAt) %></span>
+                  <% } %>
+                </div>
+              <% }); %>
+            </details>
+          <% } %>
+        </section>
+      <% }); %>
+
+    <% } %>
+
+    <div style="padding-bottom:80px; padding-top:8px;">
+      <% if (nextIsShift) { %>
+        <a href="<%= staffUrl('/select-shift') %>" class="btn btn-primary btn-full">Continue to my shift →</a>
+      <% } else if (hasShift) { %>
+        <a href="<%= staffUrl('/tasks') %>" class="btn btn-ghost btn-full">← Back to my tasks</a>
+      <% } else { %>
+        <a href="<%= staffUrl('/select-shift') %>" class="btn btn-primary btn-full">Start my shift →</a>
+      <% } %>
+      <div class="powered-by" style="margin-top:16px;">
+        <span>Powered by</span>
+        <img src="<%= staffUrl('/shiftylist-logo.png') %>" alt="ShiftyList">
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
