@@ -47,3 +47,13 @@ CREATE TABLE IF NOT EXISTS company_goal_updates (
 
 CREATE INDEX IF NOT EXISTS company_goal_updates_goal_idx
   ON company_goal_updates (goal_id, created_at);
+
+-- Who has already been shown the board today, so login surfaces it once a
+-- business day rather than at the start of every shift.
+CREATE TABLE IF NOT EXISTS company_board_views (
+  id          serial PRIMARY KEY,
+  employee_id integer NOT NULL,
+  date        text NOT NULL,
+  seen_at     timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (employee_id, date)
+);

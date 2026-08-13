@@ -199,6 +199,19 @@ export const companyGoalUpdates = pgTable("company_goal_updates", {
 export type CompanyGoalUpdate = typeof companyGoalUpdates.$inferSelect;
 export type InsertCompanyGoalUpdate = typeof companyGoalUpdates.$inferInsert;
 
+// Who has already been shown the board today. Staff see it once a business
+// day at login rather than at the start of every shift.
+export const companyBoardViews = pgTable("company_board_views", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  date: text("date").notNull(),
+  seenAt: timestamp("seen_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique().on(table.employeeId, table.date),
+]);
+
+export type CompanyBoardView = typeof companyBoardViews.$inferSelect;
+
 // Maps a shift's start time range to one of this store's shift types, used
 // to classify imported Homebase rows into Open/Mid/Close (etc).
 export const shiftTimeRules = pgTable("shift_time_rules", {

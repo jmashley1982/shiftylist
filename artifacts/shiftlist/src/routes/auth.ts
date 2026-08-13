@@ -2,7 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/index.js";
 import { staffUrl } from "../lib/urls.js";
 import { logger } from "../lib/logger.js";
-import { boardHasGoals } from "../lib/companyBoard.js";
+import { boardHasGoals, hasSeenBoardToday } from "../lib/companyBoard.js";
 
 const router = Router();
 
@@ -47,13 +47,13 @@ router.post("/confirm-name", async (req, res) => {
   req.session.employeeCode = emp.code;
   delete req.session.pendingEmployee;
 
-  // Every shift starts with the company-wide to-do list, so staff see where
-  // the business is before getting on with their own tasks — but only when
-  // there's something on it. An empty board would just be a dead click
-  // between login and shift select.
+  // Staff see the company-wide to-do list once a day, before getting on with
+  // their own tasks — skipped when the board is empty (a dead click between
+  // login and shift select) or when they've already seen it today (someone
+  // working a double shouldn't be shown it twice).
   let showBoard = false;
   try {
-    showBoard = await boardHasGoals();
+    showBoard = (await boardHasGoals()) && !(await hasSeenBoardToday(emp.id));
   } catch (err) {
     // Never let the board block someone from starting their shift.
     logger.error({ err }, "Failed to check the company board — skipping it");

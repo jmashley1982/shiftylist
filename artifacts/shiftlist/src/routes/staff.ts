@@ -5,7 +5,7 @@ import { getBusinessDayStr } from "../utils/dateHelpers.js";
 import { logger } from "../lib/logger.js";
 import { staffUrl } from "../lib/urls.js";
 import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
-import { loadBoard, STATUS_LABELS } from "../lib/companyBoard.js";
+import { loadBoard, recordBoardView, STATUS_LABELS } from "../lib/companyBoard.js";
 import { formatDateMaybeYear, formatLocalDate } from "../utils/dateHelpers.js";
 
 const router = Router();
@@ -18,6 +18,16 @@ const router = Router();
  */
 router.get("/company", ensureStaffAuth, async (req, res) => {
   const board = await loadBoard();
+
+  // Awaited, not fire-and-forget: on Workers the request's connection pool is
+  // closed the moment the response ends, which would kill a floating write.
+  try {
+    await recordBoardView(req.session.employeeId!);
+  } catch (err) {
+    // Worst case they are shown the board again at their next login.
+    logger.error({ err }, "Failed to record a company board view");
+  }
+
   res.render("companyBoard", {
     board,
     employeeName: req.session.employeeName,

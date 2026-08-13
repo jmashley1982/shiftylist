@@ -1,5 +1,5 @@
 import { pool } from "../db/index.js";
-import { getTodayStr } from "../utils/dateHelpers.js";
+import { getTodayStr, getBusinessDayStr } from "../utils/dateHelpers.js";
 
 /**
  * The Company Board — one company-wide to-do list, separate from the per-shift
@@ -85,6 +85,19 @@ export async function ensureCompanyTables(): Promise<void> {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS company_goal_updates_goal_idx
       ON company_goal_updates (goal_id, created_at)
+  `);
+
+  // Who has already seen the board today, so login shows it once a day
+  // instead of at the start of every shift. Keyed the same way
+  // active_sessions is — employee + business day.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS company_board_views (
+      id          serial PRIMARY KEY,
+      employee_id integer NOT NULL,
+      date        text NOT NULL,
+      seen_at     timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (employee_id, date)
+    )
   `);
 
   ensured = true;
@@ -293,4 +306,46 @@ export async function boardHasGoals(): Promise<boolean> {
     "SELECT COUNT(*)::int AS count FROM company_goals"
   );
   return (res.rows[0]?.count ?? 0) > 0;
+}
+
+/**
+ * Has this employee already been shown the board today? Staff open a shift
+ * most days, and a board that changes weekly does not need re-reading at
+ * every login — so it is shown once per business day, per person.
+ *
+ * Business day, not calendar day, so someone closing at 12:30am isn't shown
+ * it a second time on what is really the same shift.
+ */
+export async function hasSeenBoardToday(employeeId: number): Promise<boolean> {
+  await ensureCompanyTables();
+  const res = await pool.query(
+    "SELECT 1 FROM company_board_views WHERE employee_id = $1 AND date = $2",
+    [employeeId, getBusinessDayStr()]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+/** Number of days of view history to keep — matches the reports purge. */
+const VIEW_HISTORY_DAYS = 30;
+
+/**
+ * Remember that this employee has seen the board today. Called for any staff
+ * view of it, not just the one after login: someone who opened it themselves
+ * this morning has seen today's board, whichever route took them there.
+ */
+export async function recordBoardView(employeeId: number): Promise<void> {
+  await ensureCompanyTables();
+  const res = await pool.query(
+    `INSERT INTO company_board_views (employee_id, date) VALUES ($1, $2)
+     ON CONFLICT (employee_id, date) DO NOTHING`,
+    [employeeId, getBusinessDayStr()]
+  );
+
+  // Only on the day's first view, so the sweep runs once per person per day
+  // rather than on every page load.
+  if (res.rowCount) {
+    await pool.query(
+      `DELETE FROM company_board_views WHERE seen_at < NOW() - INTERVAL '${VIEW_HISTORY_DAYS} days'`
+    );
+  }
 }

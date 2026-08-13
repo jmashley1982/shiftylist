@@ -138,8 +138,9 @@ These are load-bearing — changing them will break production:
 - **Company Board**: a second, company-wide to-do list, entirely separate from the
   shift checklists — the months-long business goals management is working on.
   Managers keep it at `/admin/shifts/company` (the **Goals** tab); every staff
-  member sees it read-only at `/staff/company` immediately after logging in,
-  before picking a shift, and can return to it from the task list. Each item has a
+  member sees it read-only at `/staff/company` after logging in — once per
+  business day, before picking a shift, not at the start of every shift — and
+  can return to it any time from the task list. Each item has a
   status (Not started / In progress / Done), an owner, an optional target date that
   raises an **Overdue** badge when it passes, and dated progress notes that give
   staff the running story. Items are grouped into manager-defined categories;
@@ -175,8 +176,8 @@ These are load-bearing — changing them will break production:
   first, so edit the `.ejs` files, never the generated one.
 - The `sessions` table backs express-session. It is in the Drizzle schema, so
   `push-force` creates it; `scripts/post-merge.sh` also creates it idempotently.
-- The Company Board's three tables (`company_categories`, `company_goals`,
-  `company_goal_updates`) are in the Drizzle schema *and* created lazily by
+- The Company Board's four tables (`company_categories`, `company_goals`,
+  `company_goal_updates`, `company_board_views`) are in the Drizzle schema *and* created lazily by
   `ensureCompanyTables()` on the first request that touches them — the same
   belt-and-braces the schedule tables use, because `wrangler deploy` runs no
   migration step against production. `lib/db/migrations/004_company_board.sql`

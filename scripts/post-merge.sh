@@ -75,4 +75,12 @@ CREATE TABLE IF NOT EXISTS company_goal_updates (
 
 CREATE INDEX IF NOT EXISTS company_goal_updates_goal_idx
   ON company_goal_updates (goal_id, created_at);
+
+CREATE TABLE IF NOT EXISTS company_board_views (
+  id          SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL,
+  date        TEXT NOT NULL,
+  seen_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (employee_id, date)
+);
 SQL
