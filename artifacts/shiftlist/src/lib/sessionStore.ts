@@ -58,11 +58,26 @@ export class PgSessionStore extends Store {
       .catch((err) => callback?.(err));
   }
 
+  /**
+   * Acknowledges BEFORE the update lands, deliberately. When touch (or save)
+   * signals completion asynchronously, express-session plays a trick with the
+   * response: it writes all but the last byte of the body, waits for the store,
+   * and only then sends the final byte. On workerd's HTTP bridge that deferred
+   * final byte is dropped, so every response that touched a live session went
+   * out one byte short — invisible on HTML pages, fatal on JSON, where it
+   * surfaced as a parse error on every Company Board status click. Answering
+   * synchronously keeps the response in one piece; sliding the expiry is
+   * best-effort bookkeeping that nothing downstream waits on. The per-request
+   * pool's end() waits for checked-out clients, so the query still completes
+   * before the pool is torn down.
+   */
   override touch(sid: string, sess: SessionData, callback?: (err?: unknown) => void): void {
-    pool
+    void pool
       .query(`UPDATE sessions SET expire = $2 WHERE sid = $1`, [sid, expiryOf(sess)])
-      .then(() => callback?.())
-      .catch((err) => callback?.(err));
+      .catch((err) => {
+        logger.error({ err }, "session touch failed");
+      });
+    callback?.();
   }
 }
 

@@ -31,6 +31,17 @@ export async function restoreActiveShift(req: Request): Promise<number | null> {
     if (!shiftId) return null;
 
     req.session.selectedShiftId = shiftId;
+    // Persist now rather than leaving it to express-session's end-of-response
+    // save: a deferred save makes express-session hold back the response's
+    // final byte until the store answers, and workerd's HTTP bridge drops that
+    // byte — which corrupts JSON responses (see PgSessionStore.touch). Saving
+    // here means the response-time save has nothing left to do.
+    await new Promise<void>((resolve) => {
+      req.session.save((err) => {
+        if (err) logger.error({ err }, "Failed to persist a restored shift");
+        resolve();
+      });
+    });
     logger.info(
       { employeeId: req.session.employeeId, shiftId },
       "Restored an in-progress shift after a lost session"
