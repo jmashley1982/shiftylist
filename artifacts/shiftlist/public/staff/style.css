@@ -1392,8 +1392,7 @@ tbody tr:hover { background: rgba(62,207,178,.04); }
   white-space: pre-wrap;
 }
 
-.goal-update-more > summary,
-.goal-done-group > summary {
+.goal-update-more > summary {
   cursor: pointer;
   font-size: 0.76rem;
   font-weight: 700;
@@ -1402,17 +1401,14 @@ tbody tr:hover { background: rgba(62,207,178,.04); }
   padding: 4px 0;
 }
 
-.goal-update-more > summary::before,
-.goal-done-group > summary::before {
+.goal-update-more > summary::before {
   content: "▸ ";
   color: var(--muted-light);
 }
 
-.goal-update-more[open] > summary::before,
-.goal-done-group[open] > summary::before { content: "▾ "; }
+.goal-update-more[open] > summary::before { content: "▾ "; }
 
-.goal-update-more > summary::-webkit-details-marker,
-.goal-done-group > summary::-webkit-details-marker { display: none; }
+.goal-update-more > summary::-webkit-details-marker { display: none; }
 
 .goal-update-more {
   display: flex;
@@ -1420,31 +1416,44 @@ tbody tr:hover { background: rgba(62,207,178,.04); }
   gap: 8px;
 }
 
-/* ── Completed roll-up ── */
-.goal-done-group {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 13px;
-  background: rgba(255,255,255,.015);
+/* ── Completed work ──
+   Shown in full on the staff board rather than folded away: finished work is
+   the point, so it gets the same card as live work with the accent rail on
+   the other side — a mirror of .goal-card-active, read as "banked" rather
+   than "in flight". */
+.goal-card-done {
+  border-right: 3px solid var(--brand);
+  background: rgba(62,207,178,.06);
 }
 
-.goal-done-item {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 0;
-  font-size: 0.84rem;
-  border-top: 1px solid var(--border);
-}
+.goal-card-done .goal-title { color: var(--text-mid); }
 
-.goal-done-check { color: var(--brand); font-weight: 800; }
-.goal-done-title { flex: 1; color: var(--text-mid); }
+/* Finished inside the last week. Deliberately louder than the Done pill next
+   to it — this is the bit meant to catch someone's eye on the way in. */
+.goal-status-fresh {
+  background: var(--brand);
+  color: #06231e;
+  border: 1px solid var(--brand);
+}
 
 .goal-done-date {
   font-size: 0.72rem;
   color: var(--muted);
   white-space: nowrap;
+  margin-left: auto;
+  align-self: center;
 }
+
+/* ── This week's momentum ── */
+.board-wins {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 0.82rem;
+  color: var(--text-mid);
+}
+
+.board-wins strong { color: var(--brand); font-weight: 800; }
 
 /* ── Manager editor only ── */
 .goal-edit-field {

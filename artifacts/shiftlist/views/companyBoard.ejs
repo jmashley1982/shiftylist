@@ -52,6 +52,13 @@
           <span class="board-count-sep">·</span>
           <span><strong><%= board.totals.notStarted %></strong> to do</span>
         </div>
+
+        <% if (board.totals.doneThisWeek > 0) { %>
+          <div class="board-wins">
+            🔥 <strong><%= board.totals.doneThisWeek %></strong>
+            <%= board.totals.doneThisWeek === 1 ? 'win' : 'wins' %> in the last week
+          </div>
+        <% } %>
       </div>
 
       <% board.categories.forEach(function (category) { %>
@@ -111,20 +118,33 @@
             </article>
           <% }); %>
 
-          <% if (doneGoals.length > 0) { %>
-            <details class="goal-done-group">
-              <summary><%= doneGoals.length %> completed in <%= category.name %></summary>
-              <% doneGoals.forEach(function (goal) { %>
-                <div class="goal-done-item">
-                  <span class="goal-done-check">✓</span>
-                  <span class="goal-done-title"><%= goal.title %></span>
-                  <% if (goal.completedAt) { %>
-                    <span class="goal-done-date"><%= formatLocalDate(goal.completedAt) %></span>
-                  <% } %>
-                </div>
-              <% }); %>
-            </details>
-          <% } %>
+          <%
+            /* Finished work is shown in full, not folded away behind a
+               summary — staff should be able to see what the company has
+               actually banked, not just what's still outstanding. */
+          %>
+          <% doneGoals.forEach(function (goal) { %>
+            <article class="goal-card goal-card-done">
+              <div class="goal-card-head">
+                <span class="goal-status goal-status-done">✓ <%= statusLabels[goal.status] %></span>
+                <% if (goal.justFinished) { %>
+                  <span class="goal-status goal-status-fresh">Just landed</span>
+                <% } %>
+                <% if (goal.completedAt) { %>
+                  <span class="goal-done-date"><%= formatLocalDate(goal.completedAt) %></span>
+                <% } %>
+              </div>
+
+              <h3 class="goal-title"><%= goal.title %></h3>
+              <% if (goal.detail) { %>
+                <p class="goal-detail"><%= goal.detail %></p>
+              <% } %>
+
+              <% if (goal.owner) { %>
+                <div class="goal-meta"><span>Led by <strong><%= goal.owner %></strong></span></div>
+              <% } %>
+            </article>
+          <% }); %>
         </section>
       <% }); %>
 

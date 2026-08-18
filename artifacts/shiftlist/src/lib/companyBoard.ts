@@ -35,6 +35,13 @@ export function isGoalStatus(value: unknown): value is GoalStatus {
 export const UNCATEGORIZED_NAME = "General";
 
 /**
+ * How recently a goal must have been finished to still read as a fresh win on
+ * the staff board. A week covers someone who works a couple of shifts and
+ * still sees what landed while they were off.
+ */
+const FRESH_WIN_DAYS = 7;
+
+/**
  * Like ensureScheduleTables(), these tables are created on first use rather
  * than by a migration: the app deploys with `wrangler deploy`, which runs no
  * migration step against production. lib/db/migrations/004_company_board.sql
@@ -122,6 +129,8 @@ export interface Goal {
   completedAt: Date | null;
   /** Target date is in the past and the goal isn't finished. */
   overdue: boolean;
+  /** Finished inside the last week — the staff board calls these out as fresh wins. */
+  justFinished: boolean;
   /** Newest first. */
   updates: GoalUpdate[];
 }
@@ -142,6 +151,8 @@ export interface BoardTotals {
   donePct: number;
   /** Percentage in flight — stacked after donePct on the progress bar. */
   inProgressPct: number;
+  /** Finished inside the last week — momentum, not a running total. */
+  doneThisWeek: number;
 }
 
 export interface Board {
@@ -229,9 +240,11 @@ export async function loadBoard(options: LoadBoardOptions = {}): Promise<Board> 
   }
 
   const today = getTodayStr();
+  const freshWinCutoff = Date.now() - FRESH_WIN_DAYS * 24 * 60 * 60 * 1000;
 
   const goals: Goal[] = goalRes.rows.map((row) => {
     const status: GoalStatus = isGoalStatus(row.status) ? row.status : "not_started";
+    const completedAt = row.completed_at ? toDate(row.completed_at) : null;
     return {
       id: row.id,
       categoryId: row.category_id,
@@ -241,9 +254,11 @@ export async function loadBoard(options: LoadBoardOptions = {}): Promise<Board> 
       owner: row.owner,
       targetDate: row.target_date,
       displayOrder: row.display_order,
-      completedAt: row.completed_at ? toDate(row.completed_at) : null,
+      completedAt,
       // String comparison is safe and timezone-free for YYYY-MM-DD.
       overdue: status !== "done" && row.target_date !== null && row.target_date < today,
+      justFinished:
+        status === "done" && completedAt !== null && completedAt.getTime() >= freshWinCutoff,
       updates: updatesByGoal.get(row.id) ?? [],
     };
   });
@@ -284,6 +299,7 @@ export async function loadBoard(options: LoadBoardOptions = {}): Promise<Board> 
       total,
       donePct: total ? Math.round((done / total) * 100) : 0,
       inProgressPct: total ? Math.round((inProgress / total) * 100) : 0,
+      doneThisWeek: goals.filter((g) => g.justFinished).length,
     },
   };
 }
