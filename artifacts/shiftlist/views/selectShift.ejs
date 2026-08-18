@@ -11,18 +11,26 @@
     <div class="card">
       <img src="<%= staffUrl('/vvas-logo.png') %>" alt="Viking Vapor & Smoke" class="card-logo">
       <p style="font-size:0.88rem; color:var(--muted); margin-bottom:4px;">Hi, <%= employeeName %>!</p>
-      <p style="font-size:0.85rem; color:var(--muted); margin-bottom:24px;">Which shift are you working today?</p>
+      <% if (currentShiftId) { %>
+        <p style="font-size:0.85rem; color:var(--muted); margin-bottom:24px;">Your shift is already going — keep it selected and your checked-off tasks come back with you.</p>
+      <% } else { %>
+        <p style="font-size:0.85rem; color:var(--muted); margin-bottom:24px;">Which shift are you working today?</p>
+      <% } %>
 
       <form method="POST" action="<%= staffUrl('/select-shift') %>" class="form-stack">
         <div class="form-group">
           <% shifts.forEach(function(shift) { %>
-            <label style="display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; margin-bottom:10px; cursor:pointer; transition: border-color 0.15s;">
-              <input type="radio" name="shiftId" value="<%= shift.id %>" required style="width:18px; height:18px;">
+            <% var isCurrent = currentShiftId === shift.id; %>
+            <label style="display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid <%= isCurrent ? 'var(--brand)' : 'var(--border)' %>; border-radius:10px; margin-bottom:10px; cursor:pointer; transition: border-color 0.15s;">
+              <input type="radio" name="shiftId" value="<%= shift.id %>" required style="width:18px; height:18px;" <%= isCurrent ? 'checked' : '' %>>
               <span style="font-size:1rem; font-weight:600;"><%= shift.name %></span>
+              <% if (isCurrent) { %>
+                <span style="margin-left:auto; font-size:0.7rem; font-weight:800; color:var(--brand); letter-spacing:0.06em; text-transform:uppercase;">In progress</span>
+              <% } %>
             </label>
           <% }); %>
         </div>
-        <button type="submit" class="btn btn-primary btn-full">Start My Shift</button>
+        <button type="submit" class="btn btn-primary btn-full"><%= currentShiftId ? 'Back to My Tasks' : 'Start My Shift' %></button>
       </form>
 
       <a href="<%= staffUrl('/logout') %>" class="btn btn-ghost btn-full" style="margin-top:12px;">Not me — Log out</a>

@@ -12,7 +12,10 @@ function localHour(): number {
     new Intl.DateTimeFormat("en-US", {
       timeZone: tz,
       hour: "numeric",
-      hour12: false,
+      // hourCycle, not hour12:false — en-US's "false" is allowed to mean the
+      // h24 cycle, which reports midnight as 24 and would put the small hours
+      // on the wrong side of the business-day cutoff.
+      hourCycle: "h23",
     }).format(new Date()),
     10
   );

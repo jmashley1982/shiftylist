@@ -2,7 +2,8 @@ import { Store, type SessionData } from "express-session";
 import { pool } from "../db/index.js";
 import { logger } from "./logger.js";
 
-const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
+/** Only a backstop for a session with no cookie of its own; app.ts sets the real one. */
+const DEFAULT_TTL_MS = 16 * 60 * 60 * 1000;
 
 /**
  * Sessions in Postgres rather than process memory.

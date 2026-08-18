@@ -7,8 +7,54 @@ import { staffUrl } from "../lib/urls.js";
 import { sweepStaleSessionsOnRequest } from "../utils/autoSubmit.js";
 import { loadBoard, recordBoardView, STATUS_LABELS } from "../lib/companyBoard.js";
 import { formatDateMaybeYear, formatLocalDate } from "../utils/dateHelpers.js";
+import { restoreActiveShift } from "../lib/activeShift.js";
 
 const router = Router();
+
+/** What the checklist page needs to draw a tick: who, when, and whether it was late. */
+interface Completion {
+  byName: string;
+  at: string;
+  lateReason: string | null;
+}
+
+/**
+ * Everything ticked off for one shift on one business day, keyed by task name.
+ *
+ * The single source of truth for the checkboxes. The page renders from it on
+ * load and re-reads it from GET /completions while it is open, so a stale or
+ * restored-from-cache page repairs itself instead of showing a shift's work
+ * as undone.
+ */
+async function loadCompletions(
+  date: string,
+  shiftId: number
+): Promise<Record<string, Completion>> {
+  const res = await pool.query(
+    `SELECT task_name, completed_by_name, completed_at, late_reason
+     FROM task_completions
+     WHERE date = $1 AND shift_id = $2`,
+    [date, shiftId]
+  );
+
+  const map: Record<string, Completion> = {};
+  for (const row of res.rows as {
+    task_name: string;
+    completed_by_name: string;
+    completed_at: Date | string;
+    late_reason: string | null;
+  }[]) {
+    map[row.task_name] = {
+      byName: row.completed_by_name,
+      at:
+        row.completed_at instanceof Date
+          ? row.completed_at.toISOString()
+          : String(row.completed_at),
+      lateReason: row.late_reason,
+    };
+  }
+  return map;
+}
 
 /**
  * The Company Board, read-only. Deliberately guarded by ensureStaffAuth alone
@@ -44,13 +90,15 @@ router.get("/company", ensureStaffAuth, async (req, res) => {
 router.get("/tasks", ensureStaffAuth, async (req, res) => {
   sweepStaleSessionsOnRequest();
   const today = getBusinessDayStr();
-  const shiftId = req.session.selectedShiftId;
+  // Not just the session: someone whose login expired mid-shift is put back
+  // on the shift they were already working, so their ticks come back with them.
+  const shiftId = req.session.selectedShiftId ?? (await restoreActiveShift(req));
 
   if (!shiftId) {
     return void res.redirect(staffUrl("/select-shift"));
   }
 
-  const [standingRes, extraRes, compRes, shiftRes] = await Promise.all([
+  const [standingRes, extraRes, completionMap, shiftRes] = await Promise.all([
     pool.query(`
       SELECT t.name as task_name, st.time_start, st.time_end
       FROM shift_tasks st
@@ -64,11 +112,7 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
       WHERE shift_id = $1 AND date = $2
       ORDER BY display_order
     `, [shiftId, today]),
-    pool.query(`
-      SELECT task_name, completed_by_name, completed_at, late_reason
-      FROM task_completions
-      WHERE date = $1 AND shift_id = $2
-    `, [today, shiftId]),
+    loadCompletions(today, shiftId),
     pool.query("SELECT name FROM shifts WHERE id = $1", [shiftId]),
   ]);
 
@@ -89,23 +133,6 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
 
   if (tasks.length === 0) {
     return void res.render("noTasks", { employeeName: req.session.employeeName });
-  }
-
-  const completionMap: Record<string, { byName: string; at: string; lateReason: string | null }> = {};
-  for (const row of compRes.rows as {
-    task_name: string;
-    completed_by_name: string;
-    completed_at: Date | string;
-    late_reason: string | null;
-  }[]) {
-    completionMap[row.task_name] = {
-      byName: row.completed_by_name,
-      at:
-        row.completed_at instanceof Date
-          ? row.completed_at.toISOString()
-          : String(row.completed_at),
-      lateReason: row.late_reason,
-    };
   }
 
   const shiftName =
@@ -133,9 +160,37 @@ router.get("/tasks", ensureStaffAuth, async (req, res) => {
   });
 });
 
+/**
+ * The checklist's ticks, as JSON. The page polls this while it is open.
+ *
+ * Why it exists: the checkbox state used to be baked into the HTML once, at
+ * render time. A page restored from the browser's back/forward cache, or
+ * reloaded after a login bounce, therefore showed whatever was true when it
+ * was first drawn — an empty checklist, hours of work apparently undone —
+ * even though every tick was safe in the database. Now the page re-reads the
+ * truth from here and repairs itself.
+ *
+ * Also how two people working the same shift see each other's ticks without
+ * either of them reloading.
+ */
+router.get("/completions", ensureStaffAuth, async (req, res) => {
+  const shiftId = req.session.selectedShiftId ?? (await restoreActiveShift(req));
+  if (!shiftId) {
+    return void res.json({ ok: false, error: "No shift selected" });
+  }
+
+  try {
+    const completions = await loadCompletions(getBusinessDayStr(), shiftId);
+    res.json({ ok: true, completions });
+  } catch (err) {
+    logger.error({ err }, "Failed to read task completions");
+    res.status(500).json({ ok: false, error: "DB error" });
+  }
+});
+
 router.post("/complete", ensureStaffAuth, async (req, res) => {
   const { taskName, lateReason } = req.body as { taskName?: string; lateReason?: string };
-  const shiftId = req.session.selectedShiftId;
+  const shiftId = req.session.selectedShiftId ?? (await restoreActiveShift(req));
   const date = getBusinessDayStr();
 
   if (!shiftId || !taskName?.trim()) {
@@ -170,7 +225,7 @@ router.post("/complete", ensureStaffAuth, async (req, res) => {
 
 router.post("/uncomplete", ensureStaffAuth, async (req, res) => {
   const { taskName } = req.body as { taskName?: string };
-  const shiftId = req.session.selectedShiftId;
+  const shiftId = req.session.selectedShiftId ?? (await restoreActiveShift(req));
   const date = getBusinessDayStr();
 
   if (!shiftId || !taskName?.trim()) {
@@ -207,7 +262,7 @@ router.post("/submit", ensureStaffAuth, async (req, res) => {
     return void res.status(400).send("Invalid task data");
   }
 
-  const shiftId = req.session.selectedShiftId;
+  const shiftId = req.session.selectedShiftId ?? (await restoreActiveShift(req));
   const shiftName = shiftId
     ? (
         (await pool.query("SELECT name FROM shifts WHERE id = $1", [shiftId]))

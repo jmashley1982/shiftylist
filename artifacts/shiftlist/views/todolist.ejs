@@ -26,6 +26,7 @@
              back to it mid-shift. Kept out of the navbar, which has no room
              left for it at phone width. -->
         <a href="<%= staffUrl('/company') %>" style="font-size:0.75rem; font-weight:700; color:var(--brand); text-decoration:none;">🎯 Company Board</a>
+        <a href="<%= staffUrl('/select-shift') %>" style="font-size:0.75rem; font-weight:600; color:var(--muted); text-decoration:none; margin-left:10px;">Change shift</a>
       </div>
       <span class="shift-badge"><%= shift %></span>
     </div>
@@ -331,6 +332,83 @@
         toggling = false;
       }
     }
+
+    // ── Keep the ticks honest ─────────────────────────────────────────────────
+    // The checkboxes are drawn from the database at render time, and this page
+    // can outlive that render by hours: phones freeze tabs, the back/forward
+    // cache serves a page exactly as it looked when it was left, and a login
+    // bounce can return you to a copy from the start of the shift. All of
+    // those used to show a finished checklist as untouched — the work was
+    // safe in the database, the screen just lied about it.
+    //
+    // So re-read the truth whenever the page is shown again, and every 30 s
+    // while it is open. This also means two people on the same shift see each
+    // other's ticks without either of them reloading.
+    var resyncing = false;
+
+    function applyCompletions(map) {
+      var changed = false;
+
+      taskData.forEach(function(t, idx) {
+        var c = map[t.text];
+        if (c) {
+          var time = new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          if (!t.completed || t.completionTime !== time || t.completedByName !== c.byName) changed = true;
+          t.completed       = true;
+          t.completionTime  = time;
+          t.completedByName = c.byName;
+          t.lateReason      = c.lateReason || null;
+        } else if (t.completed) {
+          // Genuinely un-ticked in the database — by this person on another
+          // device, or by whoever else is working this shift.
+          t.completed       = false;
+          t.completionTime  = null;
+          t.completedByName = null;
+          t.lateReason      = null;
+          changed = true;
+        }
+        renderTask(idx);
+      });
+
+      if (changed) {
+        updateProgress();
+        checkTiming();
+      }
+    }
+
+    async function resyncCompletions() {
+      // Never fight an in-flight tap: that request is about to tell us the
+      // same thing, and losing the race would flicker the checkbox back.
+      if (resyncing || toggling) return;
+      resyncing = true;
+      try {
+        var resp = await fetch('<%= staffUrl("/completions") %>', {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store',
+        });
+        var ct = resp.headers.get('content-type') || '';
+        // Not JSON means the login bounced us to an HTML page — the session is
+        // gone. Say nothing and change nothing: what is on screen is still
+        // right, and the next tap handles the sign-in properly.
+        if (!resp.ok || ct.indexOf('application/json') === -1) return;
+        var data = await resp.json();
+        if (data && data.ok && data.completions) applyCompletions(data.completions);
+      } catch (e) {
+        // Offline or a dropped request — keep what is on screen.
+      } finally {
+        resyncing = false;
+      }
+    }
+
+    // pageshow fires on a normal load AND on a back/forward-cache restore,
+    // which is the case a plain 'load' listener would miss entirely.
+    window.addEventListener('pageshow', function(e) {
+      if (e.persisted) resyncCompletions();
+    });
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) resyncCompletions();
+    });
+    setInterval(resyncCompletions, 30000);
 
     // ── Submit ────────────────────────────────────────────────────────────────
     var pendingSubmission = false;

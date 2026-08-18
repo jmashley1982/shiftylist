@@ -131,8 +131,8 @@ These are load-bearing — changing them will break production:
 
 ## Product
 
-- **Staff login**: Enter 4-digit code → confirm name → select shift (Open/Mid/Close) → see today's tasks
-- **Task checklist**: Tick off tasks with timestamps, add notes
+- **Staff login**: Enter 4-digit code → confirm name → select shift (Open/Mid/Close) → see today's tasks. Someone who logs in with a shift already under way skips the picker and goes straight back to that checklist.
+- **Task checklist**: Tick off tasks with timestamps, add notes. The page re-reads the ticks from the server whenever it comes back to the foreground and every 30 s, so a stale or cached page repairs itself and two people on the same shift see each other's work.
 - **Incomplete task validation**: If not all tasks checked → modal asks to confirm and add a note
 - **Report submission**: Tasks + notes saved to the database with timestamps; visible in the admin reports page
 - **Company Board**: a second, company-wide to-do list, entirely separate from the
@@ -176,6 +176,19 @@ These are load-bearing — changing them will break production:
   first, so edit the `.ejs` files, never the generated one.
 - The `sessions` table backs express-session. It is in the Drizzle schema, so
   `push-force` creates it; `scripts/post-merge.sh` also creates it idempotently.
+- Staff logins are **rolling** (`rolling: true` in `src/app.ts`): every request
+  pushes the expiry out again. Without it the cookie died a fixed number of
+  hours after sign-in and threw people out mid-shift — a close-shift employee
+  who signed in at 3:30pm was bounced at 11:30pm. The window is 16 h, enough
+  for a double.
+- A shift in progress lives in `active_sessions`, not in the login cookie, so
+  `src/lib/activeShift.ts` can put someone back on it after any lost login.
+  Nothing in the staff routes should read `req.session.selectedShiftId`
+  without falling back to `restoreActiveShift(req)` — completions are keyed by
+  shift, so landing on the wrong one shows an empty checklist.
+- No page from this app may be cached (`Cache-Control: no-store`, set for every
+  response in `src/app.ts`). A checklist served from cache shows a finished
+  shift as untouched.
 - The Company Board's four tables (`company_categories`, `company_goals`,
   `company_goal_updates`, `company_board_views`) are in the Drizzle schema *and* created lazily by
   `ensureCompanyTables()` on the first request that touches them — the same

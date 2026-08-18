@@ -99,8 +99,15 @@ app.use(
     secret: secret ?? "dev-secret-change-me",
     resave: false,
     saveUninitialized: false,
+    // `rolling` is the whole point: without it the cookie expires a fixed
+    // number of hours after login no matter how hard someone is using the
+    // app, so a close-shift employee who signed in at 3:30pm was thrown back
+    // to the login screen around 11:30pm — mid-shift, mid-checklist. Every
+    // request now pushes the expiry out again, and the window is long enough
+    // to cover a double.
+    rolling: true,
     cookie: {
-      maxAge: 8 * 60 * 60 * 1000,
+      maxAge: 16 * 60 * 60 * 1000,
       httpOnly: true,
       sameSite: "lax",
       secure: isProduction,
@@ -108,15 +115,19 @@ app.use(
   })
 );
 
-// Disable caching in development so the proxy always serves fresh content
-if (!isProduction) {
-  app.use((_req, res, next) => {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-    next();
-  });
-}
+// Never cache a page from this app — in production either.
+//
+// Every page here is per-person and per-minute: a checklist, a live shift
+// view, a report. A cached copy served back later shows a shift's finished
+// tasks as untouched, which is exactly the kind of "it reset itself" that
+// costs someone their evening's work. Static assets are served by Cloudflare
+// ahead of this Worker and are unaffected.
+app.use((_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
 
 app.use(router);
 

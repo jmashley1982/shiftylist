@@ -3,6 +3,8 @@ import { pool } from "../db/index.js";
 import { staffUrl } from "../lib/urls.js";
 import { logger } from "../lib/logger.js";
 import { boardHasGoals, hasSeenBoardToday } from "../lib/companyBoard.js";
+import { restoreActiveShift } from "../lib/activeShift.js";
+import { getBusinessDayStr } from "../utils/dateHelpers.js";
 
 const router = Router();
 
@@ -47,6 +49,11 @@ router.post("/confirm-name", async (req, res) => {
   req.session.employeeCode = emp.code;
   delete req.session.pendingEmployee;
 
+  // Already part-way through a shift? Go straight back to that checklist
+  // instead of asking which shift this is and risking the wrong answer —
+  // pick the wrong one and the ticks already saved are invisible.
+  const resumedShiftId = await restoreActiveShift(req);
+
   // Staff see the company-wide to-do list once a day, before getting on with
   // their own tasks — skipped when the board is empty (a dead click between
   // login and shift select) or when they've already seen it today (someone
@@ -59,7 +66,8 @@ router.post("/confirm-name", async (req, res) => {
     logger.error({ err }, "Failed to check the company board — skipping it");
   }
 
-  res.redirect(showBoard ? staffUrl("/company?next=shift") : staffUrl("/select-shift"));
+  const next = resumedShiftId ? staffUrl("/tasks") : staffUrl("/select-shift");
+  res.redirect(showBoard ? staffUrl("/company?next=shift") : next);
 });
 
 router.get("/select-shift", async (req, res) => {
@@ -67,7 +75,16 @@ router.get("/select-shift", async (req, res) => {
   const shifts = (await pool.query(
     `SELECT * FROM shifts ORDER BY CASE LOWER(name) WHEN 'open' THEN 0 WHEN 'mid' THEN 1 WHEN 'close' THEN 2 ELSE 3 END, name`
   )).rows;
-  res.render("selectShift", { employeeName: req.session.employeeName, shifts });
+  // Anyone with a shift still open today gets it pre-ticked and labelled, so
+  // the picker cannot quietly move them onto an empty checklist. Not forced:
+  // a double shift is a real thing, and they can still choose another.
+  const currentShiftId =
+    req.session.selectedShiftId ?? (await restoreActiveShift(req)) ?? null;
+  res.render("selectShift", {
+    employeeName: req.session.employeeName,
+    shifts,
+    currentShiftId,
+  });
 });
 
 router.post("/select-shift", async (req, res) => {
@@ -77,7 +94,7 @@ router.post("/select-shift", async (req, res) => {
   const shiftIdNum = Number(shiftId);
   req.session.selectedShiftId = shiftIdNum;
 
-  const today = (await import("../utils/dateHelpers.js")).getBusinessDayStr();
+  const today = getBusinessDayStr();
   const shiftRow = await pool.query("SELECT name FROM shifts WHERE id = $1", [shiftIdNum]);
   const shiftName = (shiftRow.rows[0] as { name: string } | undefined)?.name ?? "";
   await pool.query(

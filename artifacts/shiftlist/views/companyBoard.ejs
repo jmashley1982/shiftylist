@@ -132,7 +132,10 @@
 
     <div style="padding-bottom:80px; padding-top:8px;">
       <% if (nextIsShift) { %>
-        <a href="<%= staffUrl('/select-shift') %>" class="btn btn-primary btn-full">Continue to my shift →</a>
+        <!-- hasShift is true when a shift is already under way — including one
+             restored after a lost login — so send them to the checklist
+             itself rather than back through the picker. -->
+        <a href="<%= staffUrl(hasShift ? '/tasks' : '/select-shift') %>" class="btn btn-primary btn-full">Continue to my shift →</a>
       <% } else if (hasShift) { %>
         <a href="<%= staffUrl('/tasks') %>" class="btn btn-ghost btn-full">← Back to my tasks</a>
       <% } else { %>
