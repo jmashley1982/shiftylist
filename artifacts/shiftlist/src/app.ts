@@ -53,11 +53,21 @@ if (onWorkers) {
     //
     // Because this middleware runs first, express-session wraps *this*
     // wrapper, so by the time we are called the session write is already done.
+    //
+    // Teardown must wait for end()'s own completion callback rather than
+    // running right after end() is *called* — end() only schedules the final
+    // write, it doesn't block until the bytes are actually flushed. Tearing
+    // the pool down before that flush is confirmed risks cutting the response
+    // off mid-stream, which is exactly the "unterminated response" failure
+    // mode above, just moved one step later.
     const originalEnd = res.end.bind(res);
     res.end = function patchedEnd(...args: unknown[]) {
-      const result = (originalEnd as (...a: unknown[]) => unknown)(...args);
-      teardown();
-      return result;
+      const last = args[args.length - 1];
+      const userCallback = typeof last === "function" ? (args.pop() as () => void) : undefined;
+      return (originalEnd as (...a: unknown[]) => unknown)(...args, () => {
+        teardown();
+        userCallback?.();
+      });
     } as typeof res.end;
 
     runWithPool(requestPool, next);
