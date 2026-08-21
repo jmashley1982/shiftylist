@@ -4,7 +4,10 @@
 # pushes landed on main and nothing shipped. This does the same job from
 # GitHub's side, where we can see the logs when it goes wrong.
 #
-# The Cloudflare API token lives in the repo's "Claude" environment.
+# Needs one repository secret: CLOUDFLARE_API_TOKEN, made from Cloudflare's
+# "Edit Cloudflare Workers" token template. Repository secret, not an
+# environment secret — an environment is one more thing to delete by accident,
+# and it was.
 name: Deploy to Cloudflare
 
 on:
@@ -21,7 +24,6 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: Claude
     steps:
       - uses: actions/checkout@v4
 
